@@ -1,0 +1,20 @@
+#!/bin/bash
+# Mass deploy jumphosts
+
+environments=(admin stage prod)
+profile_name=$1
+
+if [[ -z "${profile_name}" ]]; then
+    echo "Usage: ${0} [aws credential profile name]"
+    exit 1
+fi
+
+for environment in ${environments[@]}; do
+    for region in us-west-2 us-east-1; do
+        echo "Creating jumphost-${environment} in ${region}"
+        aws cloudformation create-stack --stack-name jumphost-${environment} \
+                                        --template-body file://nubis/cloudformation/main.json\
+                                        --parameters file://nubis/cloudformation/parameters.${environment}.${region}.json\
+                                        --region ${region} --profile ${profile_name} --capabilities CAPABILITY_IAM
+    done
+done
