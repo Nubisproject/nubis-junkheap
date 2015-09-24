@@ -13,9 +13,7 @@ function get_ldap_passwd() {
 }
 
 # config
-ldap_server=""
-bind_dn=""
-search_base="dc=mozilla"
+. keys-variables
 bind_password="$(get_ldap_passwd)"
 
 [ -z "${ldap_server}" ] && { echo "LDAP server setting not set"; exit 1; }
