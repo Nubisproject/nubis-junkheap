@@ -20,104 +20,167 @@
 #
 
 #PROFILE='mozilla-sandbox'
-PROFILE='nubis-lab'
+#PROFILE='nubis-lab'
 #PROFILE='nubis-market'
 #PROFILE='plan-b-ldap-master'
 #PROFILE='plan-b-okta-ldap-gateway'
 #PROFILE='plan-b-bugzilla'
 #PROFILE='plan-b-akamai-edns-slave'
-REGION='us-east-1'
+#REGION='us-east-1'
 #REGION='us-west-2'
 NUBIS_PATH="/home/jason/projects/mozilla/projects/nubis"
-VPC_TEMPLATE='vpc-account.template'
+
+#declare -a PROFILES_ARRAY=( mozilla-sandbox nubis-lab nubis-market plan-b-ldap-master plan-b-okta-ldap-gateway plan-b-bugzilla plan-b-akamai-edns-slave )
+declare -a PROFILES_ARRAY=( nubis-lab )
+declare -a REGIONS_ARRAY=( us-east-1 us-west-2 )
+declare -a ENVIRONMENTS_ARRAY=( admin stage prod )
 
 create_stack () {
-    aws cloudformation create-stack --template-body file://${NUBIS_PATH}/nubis-vpc/$VPC_TEMPLATE --parameters file://${NUBIS_PATH}/nubis-vpc/parameters/parameters-${REGION}-${PROFILE}.json --capabilities CAPABILITY_IAM --profile $PROFILE --region $REGION --stack-name ${REGION}-vpc
+    # Detect if we are working in the sandbox and select the appropriate template
+    if [ ${PROFILE} == 'mozilla-sandbox' ]; then
+        VPC_TEMPLATE='vpc-sandbox.template'
+    else
+        VPC_TEMPLATE='vpc-account.template'
+    fi
+    STACK_NAME="${REGION}-vpc"
 
-    watch -n 1 "echo 'Container Stack'; aws cloudformation describe-stacks --region $REGION --profile $PROFILE --query 'Stacks[*].[StackName, StackStatus]' --output text --stack-name ${REGION}-vpc; echo \"\nStack Resources\"; aws cloudformation describe-stack-resources --region $REGION --profile $PROFILE --stack-name ${REGION}-vpc --query 'StackResources[*].[LogicalResourceId, ResourceStatus]' --output text"
+    aws cloudformation create-stack --template-body file://${NUBIS_PATH}/nubis-vpc/${VPC_TEMPLATE} --parameters file://${NUBIS_PATH}/nubis-vpc/parameters/parameters-${REGION}-${PROFILE}.json --capabilities CAPABILITY_IAM --profile ${PROFILE} --region ${REGION} --stack-name ${STACK_NAME}
+
+    watch -n 1 "echo 'Container Stack'; aws cloudformation describe-stacks --region ${REGION} --profile ${PROFILE} --query 'Stacks[*].[StackName, StackStatus]' --output text --stack-name ${STACK_NAME}; echo \"\nStack Resources\"; aws cloudformation describe-stack-resources --region ${REGION} --profile ${PROFILE} --stack-name ${STACK_NAME} --query 'StackResources[*].[LogicalResourceId, ResourceStatus]' --output text"
 
 
-    VPC_META_STACK=$(aws cloudformation describe-stack-resources --region $REGION --profile $PROFILE --stack-name "$REGION-vpc" --query 'StackResources[?LogicalResourceId==`VPCMetaStack`].PhysicalResourceId' --output text)
+    VPC_META_STACK=$(aws cloudformation describe-stack-resources --region ${REGION} --profile ${PROFILE} --stack-name ${STACK_NAME} --query 'StackResources[?LogicalResourceId==`VPCMetaStack`].PhysicalResourceId' --output text)
     echo -e "\nVPC Meta Stack Id:\n$VPC_META_STACK"
 
-    LAMBDA_ROLL_ARN=$(aws cloudformation describe-stacks --region $REGION --profile $PROFILE --stack-name $VPC_META_STACK --query 'Stacks[*].Outputs[?OutputKey == `IamRollArn`].OutputValue' --output text)
+    LAMBDA_ROLL_ARN=$(aws cloudformation describe-stacks --region ${REGION} --profile ${PROFILE} --stack-name $VPC_META_STACK --query 'Stacks[*].Outputs[?OutputKey == `IamRollArn`].OutputValue' --output text)
     echo -e "\nLambda ARN:\n$LAMBDA_ROLL_ARN"
 
-    ZONE_ID=$(aws cloudformation describe-stack-resources --region $REGION --profile $PROFILE --stack-name $VPC_META_STACK --query 'StackResources[?LogicalResourceId == `HostedZone`].PhysicalResourceId' --output text)
+    ZONE_ID=$(aws cloudformation describe-stack-resources --region ${REGION} --profile ${PROFILE} --stack-name $VPC_META_STACK --query 'StackResources[?LogicalResourceId == `HostedZone`].PhysicalResourceId' --output text)
     echo -e "\nZone Id:\n$ZONE_ID"
 
     echo -e "\nUploading LookupStackOutputs Function"
-    aws lambda upload-function --region $REGION --profile $PROFILE --function-name LookupStackOutputs --function-zip ${NUBIS_PATH}/nubis-stacks/lambda/LookupStackOutputs/LookupStackOutputs.zip --runtime nodejs --role ${LAMBDA_ROLL_ARN} --handler index.handler --mode event --timeout 10 --memory-size 128 --description 'Gather outputs from Cloudformation stacks to be used in other Cloudformation stacks'
+    aws lambda upload-function --region ${REGION} --profile ${PROFILE} --function-name LookupStackOutputs --function-zip ${NUBIS_PATH}/nubis-stacks/lambda/LookupStackOutputs/LookupStackOutputs.zip --runtime nodejs --role ${LAMBDA_ROLL_ARN} --handler index.handler --mode event --timeout 10 --memory-size 128 --description 'Gather outputs from Cloudformation stacks to be used in other Cloudformation stacks'
 
     echo -e "\nUploading LookupNestedStackOutputs Function"
-    aws lambda upload-function --region $REGION --profile $PROFILE --function-name LookupNestedStackOutputs --function-zip ${NUBIS_PATH}/nubis-stacks/lambda/LookupNestedStackOutputs/LookupNestedStackOutputs.zip --runtime nodejs --role ${LAMBDA_ROLL_ARN} --handler index.handler --mode event --timeout 10 --memory-size 128 --description 'Gather outputs from Cloudformation enviroment specific nested stacks to be used in other Cloudformation stacks'
+    aws lambda upload-function --region ${REGION} --profile ${PROFILE} --function-name LookupNestedStackOutputs --function-zip ${NUBIS_PATH}/nubis-stacks/lambda/LookupNestedStackOutputs/LookupNestedStackOutputs.zip --runtime nodejs --role ${LAMBDA_ROLL_ARN} --handler index.handler --mode event --timeout 10 --memory-size 128 --description 'Gather outputs from Cloudformation enviroment specific nested stacks to be used in other Cloudformation stacks'
 
-    DATADOGACCESSKEY=$(aws cloudformation describe-stacks --region $REGION --profile $PROFILE --stack-name $VPC_META_STACK --query 'Stacks[*].Outputs[?OutputKey == `DatadogAccessKey`].OutputValue' --output text)
-    DATADOGSECRETKEY=$(aws cloudformation describe-stacks --region $REGION --profile $PROFILE --stack-name $VPC_META_STACK --query 'Stacks[*].Outputs[?OutputKey == `DatadogSecretKey`].OutputValue' --output text)
+    DATADOGACCESSKEY=$(aws cloudformation describe-stacks --region ${REGION} --profile ${PROFILE} --stack-name $VPC_META_STACK --query 'Stacks[*].Outputs[?OutputKey == `DatadogAccessKey`].OutputValue' --output text)
+    DATADOGSECRETKEY=$(aws cloudformation describe-stacks --region ${REGION} --profile ${PROFILE} --stack-name $VPC_META_STACK --query 'Stacks[*].Outputs[?OutputKey == `DatadogSecretKey`].OutputValue' --output text)
     echo -e "\nDataDog Access Key: $DATADOGACCESSKEY\nDataDog SecretKey: $DATADOGSECRETKEY\n"
 
-    aws route53 get-hosted-zone --region $REGION --profile $PROFILE  --id $ZONE_ID --query DelegationSet.NameServers --output table
+    aws route53 get-hosted-zone --region ${REGION} --profile ${PROFILE}  --id $ZONE_ID --query DelegationSet.NameServers --output table
 }
 
 update_stack () {
-    aws cloudformation update-stack --template-body file://${NUBIS_PATH}/nubis-vpc/$VPC_TEMPLATE --parameters file://${NUBIS_PATH}/nubis-vpc/parameters/parameters-${REGION}-${PROFILE}.json --capabilities CAPABILITY_IAM --profile $PROFILE --region $REGION --stack-name ${REGION}-vpc
+    # Detect if we are working in the sandbox and select the appropriate template
+    if [ ${PROFILE} == 'mozilla-sandbox' ]; then
+        VPC_TEMPLATE='vpc-sandbox.template'
+    else
+        VPC_TEMPLATE='vpc-account.template'
+    fi
+    STACK_NAME="${REGION}-vpc"
 
-    watch -n 1 "echo 'Container Stack'; aws cloudformation describe-stacks --region $REGION --profile $PROFILE --query 'Stacks[*].[StackName, StackStatus]' --output text --stack-name ${REGION}-vpc; echo \"\nStack Resources\"; aws cloudformation describe-stack-resources --region $REGION --profile $PROFILE --stack-name ${REGION}-vpc --query 'StackResources[*].[LogicalResourceId, ResourceStatus]' --output text"
+    echo -n " Updating \"${STACK_NAME}\" in \"${PROFILE}\" "
+    $(aws cloudformation update-stack --template-body file://${NUBIS_PATH}/nubis-vpc/${VPC_TEMPLATE} --parameters file://${NUBIS_PATH}/nubis-vpc/parameters/parameters-${REGION}-${PROFILE}.json --capabilities CAPABILITY_IAM --profile ${PROFILE} --region ${REGION} --stack-name ${STACK_NAME} 2>&1) 2> /dev/null
+    # Pause to let the status update before we start to check
+    sleep 5
+    # Wait here till the stack update is complete
+    until [ ${STACK_STATE:-NULL} == 'CREATE_COMPLETE' ] || [ ${STACK_STATE:-NULL} == 'UPDATE_COMPLETE' ]; do
+        echo -n '.'
+        STACK_STATE=$(aws cloudformation describe-stacks --region ${REGION} --profile ${PROFILE} --query 'Stacks[*].[StackStatus]' --output text --stack-name ${STACK_NAME})
+        sleep 2
+    done
+    echo -ne "\n"
+    unset STACK_STATE
 }
 
-# http://aws.amazon.com/articles/5458758371599914
-# http://docs.aws.amazon.com/cli/latest/reference/ec2/create-tags.html
-create_dummy_connections () {
-    if [ ${DUMMY_COUNT:-0} == 0 ]; then
-        echo "ERROR: You must pass a number of connections to create"
-        exit 1
+replace_jumphost () {
+    STACK_NAME="jumphost-${ENVIRONMENT}"
+
+    # Remove the known_hosts fingerprint for the jumphost
+    JUMPHOST_NAME="jumphost.${ENVIRONMENT}.${REGION}.${PROFILE}.nubis.allizom.org"
+    JUMPHOST_IP=$(dig +short ${JUMPHOST_NAME})
+    if [ $(dig +short ${JUMPHOST_NAME} | grep -c ^) != 0 ]; then
+        if [ $(ssh-keygen -F ${JUMPHOST_IP} | grep -c ^) != 0 ]; then
+            $(ssh-keygen -qR ${JUMPHOST_IP} 2>&1) 2> /dev/null
+        fi
+    fi
+    if [ $(ssh-keygen -F ${JUMPHOST_NAME} | grep -c ^) != 0 ]; then
+        $(ssh-keygen -qR ${JUMPHOST_NAME} 2>&1) 2> /dev/null
     fi
 
-    COUNT=0
-    until [ $COUNT == $DUMMY_COUNT ]; do
-        let COUNT=${COUNT}+1
-        echo -n "Creating Dummy Customer Gateway $COUNT of $DUMMY_COUNT "
-        CUSTOMER_GATEWAY_ID=$(aws ec2 create-customer-gateway --region $REGION --profile $PROFILE --type ipsec.1 --public-ip 192.2.1.$COUNT --bgp-asn 65000 --query '*.CustomerGatewayId' --output text)
-        echo "(${CUSTOMER_GATEWAY_ID})"
+    echo -n " Deleting \"${STACK_NAME}\" from \"${REGION}\" in \"${PROFILE}\" "
+    $(aws cloudformation delete-stack --profile ${PROFILE} --region ${REGION} --stack-name ${STACK_NAME} 2>&1) 2> /dev/null
+    # Pause to let the status update before we start to check
+    sleep 5
+    # Wait here till the stack delete is complete
+    until [ ${RV:-NULL} == '255' ]; do
+        echo -n '.'
+        STACK_STATE=$(aws cloudformation describe-stacks --region ${REGION} --profile ${PROFILE} --query 'Stacks[*].[StackStatus]' --output text --stack-name ${STACK_NAME} 2>&1) 2> /dev/null
+        RV=$?
+        sleep 2
+    done
+    echo -ne "\n"
+    unset STACK_STATE RV
 
-#        echo -n "Creating Dummy Virtual Private (VPN) Gateway $COUNT of $DUMMY_COUNT "
-#        VPN_GATEWAY_ID=$(aws ec2 create-vpn-gateway --region $REGION --profile $PROFILE --type ipsec.1 --query '*.VpnGatewayId' --output text)
-#        echo "(${VPN_GATEWAY_ID})"
+    echo -n " Creating \"${STACK_NAME}\" for \"${REGION}\" in \"${PROFILE}\" "
+    $(aws cloudformation create-stack --template-body "file://${NUBIS_PATH}/nubis-jumphost/nubis/cloudformation/main.json" --parameters "file://${NUBIS_PATH}/nubis-jumphost/nubis/cloudformation/parameters-${REGION}-${ENVIRONMENT}.json" --capabilities CAPABILITY_IAM  --profile ${PROFILE} --region ${REGION} --stack-name ${STACK_NAME} 2>&1) 2> /dev/null
+    # Pause to let the status update before we start to check
+    sleep 5
+    # Wait here till the stack delete is complete
+    until [ ${STACK_STATE:-NULL} == 'CREATE_COMPLETE' ] || [ ${STACK_STATE:-NULL} == 'UPDATE_COMPLETE' ]; do
+        echo -n '.'
+        STACK_STATE=$(aws cloudformation describe-stacks --region ${REGION} --profile ${PROFILE} --query 'Stacks[*].[StackStatus]' --output text --stack-name ${STACK_NAME})
+        sleep 2
+    done
+    echo -ne "\n"
+    unset STACK_STATE
 
-#        echo -n "Creating Dummy VPN-VPC Gateway Attachment $COUNT of $DUMMY_COUNT to "
-#        DEFAULT_VPC_ID=$(aws ec2 describe-vpcs --region $REGION --profile $PROFILE --query 'Vpcs[?IsDefault == `true`].VpcId' --output text)
-#        VPN_VPC_ID=$(aws ec2 attach-vpn-gateway --vpn-gateway-id $VPN_GATEWAY_ID --vpc-id $DEFAULT_VPC_ID --query '*.VpcId' --output text)
-#        echo "(${VPN_VPC_ID})"
+    echo " Uploading ssh keys to \"${JUMPHOST_NAME}\""
+    # Wait until we have dns resolution
+    while [ ${COUNT:-0} == 0 ]; do
+        COUNT=$(dig +short ${JUMPHOST_NAME} | grep -c ^)
+    done
+    # Wait until dns is updated with the new jumphost IP
+    NEW_JUMPHOST_IP=$(dig +short ${JUMPHOST_NAME})
+    until [ ${NEW_JUMPHOST_IP:-NULL} != ${JUMPHOST_IP:-NULL} ]; do
+        NEW_JUMPHOST_IP=$(dig +short ${JUMPHOST_NAME})
+    done
+    JUMPHOST_IP=$(dig +short ${JUMPHOST_NAME})
+    # Add the new known_hosts fingerprints before we attempt the upload to avoid the 'yes' dialoge
+    $(ssh-keyscan -H ${JUMPHOST_IP} >> ~/.ssh/known_hosts 2>&1) 2> /dev/null
+    $(ssh-keyscan -H ${JUMPHOST_NAME} >> ~/.ssh/known_hosts 2>&1) 2> /dev/null
+    cat ${NUBIS_PATH}/nubis-junkheap/authorized_keys_admins.pub | ssh -oStrictHostKeyChecking=no ec2-user@${JUMPHOST_NAME} 'cat >> .ssh/authorized_keys'
+    # Detect if we are working in the sandbox and upload devs ssh keys as well
+    if [ ${PROFILE} == 'mozilla-sandbox' ]; then
+        cat ${NUBIS_PATH}/nubis-junkheap/authorized_keys_devs_sandbox.pub | ssh -oStrictHostKeyChecking=no ec2-user@${JUMPHOST_NAME} 'cat >> .ssh/authorized_keys'
+    fi
+}
 
-#        echo -n "Ataching "
-#        ATTACH_STATE=$(aws ec2 describe-vpn-gateways --region $REGION --profile $PROFILE --query "VpnGateways[?VpnGatewayId == \`$VPN_GATEWAY_ID\`].VpcAttachments[*].State" --output text)
-#        while [ ${ATTACH_STATE:-NULL} != 'attached' ]; do
-#            echo -n '.'
-#            ATTACH_STATE=$(aws ec2 describe-vpn-gateways --region $REGION --profile $PROFILE --query "VpnGateways[?VpnGatewayId == \`$VPN_GATEWAY_ID\`].VpcAttachments[*].State" --output text)
-#        done
-#        echo -ne "\n"
-
-lookup VPN_CONNECTION_ID from existing VPC
-
-        echo -n "Creating Dummy VPN Connection $COUNT of $DUMMY_COUNT "
-        VPN_CONNECTION_ID=$(aws ec2 create-vpn-connection --type ipsec.1 --customer-gateway-id $CUSTOMER_GATEWAY_ID --vpn-gateway-id $VPN_GATEWAY_ID --query '*.VpnConnectionId'  --output text)
-        echo "(${VPN_CONNECTION_ID})"
-
-        VPN_GATEWAY_STATE=$(aws ec2 describe-vpn-connections --region $REGION --profile $PROFILE --query "VpnConnections[?VpnConnectionId == \`$VPN_CONNECTION_ID\`].State"  --output text)
-        echo -n "Pending "
-        while [ ${VPN_GATEWAY_STATE:-NULL} != 'available' ]; do
-            echo -n '.'
-        VPN_GATEWAY_STATE=$(aws ec2 describe-vpn-connections --region $REGION --profile $PROFILE --query "VpnConnections[?VpnConnectionId == \`$VPN_CONNECTION_ID\`].State"  --output text)
+update_all_accounts () {
+    for PROFILE in ${PROFILES_ARRAY[*]}; do
+        for REGION in ${REGIONS_ARRAY[*]}; do
+            echo -e "\n ### Updating account \"${PROFILE}\" in \"${REGION}\" ###\n"
+            update_stack
+            # If we are working in the sandbox we have only one custom environment
+            if [ ${PROFILE} == 'mozilla-sandbox' ]; then
+                ENVIRONMENT='sandbox'
+                replace_jumphost
+            # The nubis-market account does not have jumphosts ATM
+            elif [ ${PROFILE} == 'nubis-market' ]; then
+                echo " Not replacing jumphosts in the \"${PROFILE}\" account."
+            else
+                for ENVIRONMENT in ${ENVIRONMENTS_ARRAY[*]}; do
+                    replace_jumphost
+                done
+            fi
         done
-        echo -ne "\n"
-
     done
 }
 
+# jd likes to have a testing function for, well for testing stuff.
 testing () {
-VPN_CONNECTION_ID='vpn-60302f72'
-
-aws ec2 describe-vpn-connections --region $REGION --profile $PROFILE --query "VpnConnections[?VpnConnectionId == \`$VPN_CONNECTION_ID\`].State"  --output text
+    echo "Testing"
 }
 
 # Grab and setup called options
@@ -142,10 +205,6 @@ while [ "$1" != "" ]; do
             REGION=$2
             shift
         ;;
-        -s | --sandbox )
-            # We are working in the special sandbox account
-            VPC_TEMPLATE='vpc-sandbox.template'
-        ;;
          -h | -H | --help )
             echo -en "$0\n\n"
             echo -en "Usage: $0 [options] command [file]\n\n"
@@ -161,10 +220,9 @@ while [ "$1" != "" ]; do
             echo -en "  --path      -p    Specify a path where your nubis repositories are checked out\n"
             echo -en "                      Defaults to '$NUBIS_PATH'\n"
             echo -en "  --profile   -P    Specify a profile to use when uploading the files\n"
-            echo -en "                      Defaults to '$PROFILE'\n"
+            echo -en "                      Defaults to '${PROFILE}'\n"
             echo -en "  --region    -r    Specify a region to deploy to\n"
-            echo -en "                      Defaults to '$REGION'\n"
-            echo -en "  --sandbox   -s    Only set if deploying to the stage account\n"
+            echo -en "                      Defaults to '${REGION}'\n"
             echo -en "  --verbose   -v    Turn on verbosity, this should be set as the first argument\n"
             echo -en "                      Basically set -x\n\n"
             exit 0
@@ -175,6 +233,10 @@ while [ "$1" != "" ]; do
         ;;
         update )
             update_stack
+            GOT_COMMAND=1
+        ;;
+        update-all )
+            update_all_accounts
             GOT_COMMAND=1
         ;;
         create-dummies )
