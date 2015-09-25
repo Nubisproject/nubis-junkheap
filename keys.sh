@@ -13,7 +13,7 @@ function get_ldap_passwd() {
 }
 
 # config
-. keys-variables
+. variables
 bind_password="$(get_ldap_passwd)"
 
 [ -z "${ldap_server}" ] && { echo "LDAP server setting not set"; exit 1; }
