@@ -1,0 +1,27 @@
+#!/bin/bash
+# Mass deploy ssh keys to jumphost, old school config management baby!
+#
+# NOTE: _MUST_ run script on the same directory as keys.sh
+
+. variables
+
+# Helpful stuff
+basedir=$(dirname $0)
+
+admin_pubkey_file=$(mktemp)
+trap "rm -f ${admin_pubkey_file}" EXIT
+
+# Dump all ssh key file
+for i in ${admins[@]}; do
+    ${basedir}/keys.sh ${i} >> ${admin_pubkey_file}
+done
+
+# This is some O(n^3) shit going on here
+for account in ${accounts[@]}; do
+    for environment in ${environments[@]}; do
+        for region in ${regions[@]}; do
+            echo "Deploying ssh keys to jumphost.${environment}.${region}.${account}.nubis.allizom.org"
+            cat ${admin_pubkey_file} | ssh -l ec2-user -i ${nubis_key_location} jumphost.${environment}.${region}.${account}.nubis.allizom.org 'cat >> .ssh/authorized_keys'
+        done
+    done
+done

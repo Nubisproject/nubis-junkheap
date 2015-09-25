@@ -1,4 +1,0 @@
-# config
-ldap_server="xxxxx"
-bind_dn="xxxx"
-search_base="xxxxx"
