@@ -12,6 +12,8 @@ function get_ldap_passwd() {
     gpg --use-agent --batch -q -d ~/.passwd/mozilla.gpg
 }
 
+[ ! -f variables ] && { echo "Variables file does not exist"; exit 1; }
+
 # config
 . variables
 bind_password="$(get_ldap_passwd)"

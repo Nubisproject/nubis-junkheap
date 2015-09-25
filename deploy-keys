@@ -3,6 +3,8 @@
 #
 # NOTE: _MUST_ run script on the same directory as keys.sh
 
+[ ! -f variables ] && { echo "Variables file does not exist"; exit 1; }
+
 . variables
 
 # Helpful stuff
