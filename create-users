@@ -54,23 +54,19 @@ function do_stuff {
 
     if [[ ${RV} != 0 ]]; then
         echo -n "Doing stuff for ${username} on ${jumphost} ... "
-        ssh -t ec2-user@${jumphost} "sudo adduser ${username}"
-        ssh -t ec2-user@${jumphost} "sudo mkdir /home/${username}/.ssh && sudo chown -R ${username}:${username} /home/${username}/.ssh" | cat
-        ssh -t ec2-user@${jumphost} "sudo touch /home/${username}/.ssh/authorized_keys"
+        ssh -t ec2-user@${jumphost} "sudo adduser ${username}" > /dev/null 2>&1
+        ssh -t ec2-user@${jumphost} "sudo mkdir /home/${username}/.ssh && sudo chown -R ${username}:${username} /home/${username}/.ssh" > /dev/null 2>&1
+        ssh -t ec2-user@${jumphost} "sudo touch /home/${username}/.ssh/authorized_keys" > /dev/null 2>&1
 
-        for no_love in ${no_sudo}; do
-            if [[ "${no_love}" == "$username" ]]; then
-                echo "User ${username} gets no sudo love"
-            else
-                ssh -t ec2-user@${jumphost} "sudo su - root -c 'echo \"${username}     ALL=(ALL)   NOPASSWD: ALL\" > /etc/sudoers.d/${username}'" | cat
-                ssh -t ec2-user@${jumphost} "sudo chown root:root /etc/sudoers.d/${username} && sudo chmod 0440 /etc/sudoers.d/${username}" | cat
-            fi
-        done
+        # TODO: Need to figure out a way to filter  out folks to not get sudo
+        ssh -t ec2-user@${jumphost} "sudo su - root -c 'echo \"${username}     ALL=(ALL)   NOPASSWD: ALL\" > /etc/sudoers.d/${username}'"
+        ssh -t ec2-user@${jumphost} "sudo chown root:root /etc/sudoers.d/${username} && sudo chmod 0440 /etc/sudoers.d/${username}"
+
+        local user_pub_key=$(mktemp ${username}.XXXXXXXX)
+        trap "rm -f ${user_pub_key}" EXIT
 
         if $gen_key; then
             echo "Generating key with limed's awesome script"
-            local user_pub_key=$(mktemp ${username}.XXXXXXXX)
-            trap "rm -f ${user_pub_key}" EXIT
             ${basedir}/keys.sh ${username}@mozilla.com > ${user_pub_key}
             #cat ${user_pub_key} | ssh -t -t ec2-user@${jumphost} "sudo su - root -c 'cat >> /home/${username}/.ssh/authorized_keys'"
             scp -pr ${user_pub_key}  ec2-user@${jumphost}:/tmp/${username}.pub
