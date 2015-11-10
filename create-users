@@ -1,0 +1,93 @@
+#!/bin/bash
+# quick and dirty way to create a user account on bastion host and adds ssh keys
+
+ [ ! -f user-accounts ] && { echo "user-accounts file does not exist"; exit 1; }
+. user-accounts
+
+# useful stuff
+jumphost=$1
+basedir=$(dirname $0)
+
+# Do we care to generate keys from my script?
+gen_key=true
+
+if [[ -z "${jumphost}" ]]; then
+    echo "Usage: $0 [jumphost hostname]"
+    exit 1
+fi
+
+# Check if user exists
+function __check_user {
+
+    if [[  -z "$1" || -z "$2" ]]; then echo "Usage: ${FUNCNAME} [jumphost hostname] [username]"; return 1; fi
+
+    local jumphost=$1
+    local username=$2
+
+    getent_data=$(ssh ec2-user@${jumphost} getent passwd ${username})
+    echo -n "Checking if ${username} exists on host ${jumphost} ... "
+
+    if [[ -z ${getent_data} ]]; then
+        echo "Nope"
+        return 1
+    else
+        echo "Yep"
+        return 0
+    fi
+
+}
+
+# do the deed:
+# 1. create user but checks if user exists first
+# 2. create .ssh folder and  chowns it to the right owner
+# 3. Create sudoers file
+# 4. copies ssh key to server
+function do_stuff {
+
+    if [[ -z "$1" ||  -z "$2" ]]; then echo "Usage: ${FUNCNAME} [jumphost hostname] [username]"; return 1; fi
+
+    local jumphost=$1
+    local username=$2
+
+    __check_user "${jumphost}" "${username}"
+    RV=$?
+
+    if [[ ${RV} != 0 ]]; then
+        echo -n "Doing stuff for ${username} on ${jumphost} ... "
+        ssh -t ec2-user@${jumphost} "sudo adduser ${username}"
+        ssh -t ec2-user@${jumphost} "sudo mkdir /home/${username}/.ssh && sudo chown -R ${username}:${username} /home/${username}/.ssh" | cat
+        ssh -t ec2-user@${jumphost} "sudo touch /home/${username}/.ssh/authorized_keys"
+        ssh -t ec2-user@${jumphost} "sudo su - root -c 'echo \"${username}     ALL=(ALL)   NOPASSWD: ALL\" > /etc/sudoers.d/${username}'" | cat
+        ssh -t ec2-user@${jumphost} "sudo chown root:root /etc/sudoers.d/${username} && sudo chmod 0440 /etc/sudoers.d/${username}" | cat
+
+        if $gen_key; then
+            echo "Generating key with limed's awesome script"
+            local user_pub_key=$(mktemp ${username}.XXXXXXXX)
+            trap "rm -f ${user_pub_key}" EXIT
+            ${basedir}/keys.sh ${username}@mozilla.com > ${user_pub_key}
+            #cat ${user_pub_key} | ssh -t -t ec2-user@${jumphost} "sudo su - root -c 'cat >> /home/${username}/.ssh/authorized_keys'"
+            scp -pr ${user_pub_key}  ec2-user@${jumphost}:/tmp/${username}.pub
+            ssh -t ec2-user@${jumphost} "sudo mv /tmp/${username}.pub /home/${username}/.ssh/authorized_keys"
+        else
+            echo "Nope, no love for limed"
+            if [[ ! -d "${basedir}/ssh_keys" ]]; then
+                echo "Directory where we store ssh keys ${basedir}/ssh_keys does not exist"
+            else
+                scp -pr ${basedir}/ssh_keys/${username}.pub  ec2-user@${jumphost}:/tmp/${username}.pub
+                ssh -t ec2-user@${jumphost} "sudo mv /tmp/${username}.pub /home/${username}/.ssh/authorized_keys"
+                #cat ${basedir}/ssh_keys/${username}.pub | ssh -t -t ec2-user@${jumphost} "sudo su - root -c 'cat >> /home/${username}/.ssh/authorized_keys'"
+            fi
+        fi
+        ssh -t ec2-user@${jumphost} "sudo chown ${username}:${username} /home/${username}/.ssh/authorized_keys && sudo chmod 0600 /home/${username}/.ssh/authorized_keys"
+        echo "Done"
+    else
+        echo "I think user ${username} already exists so I'm not doing anyway"
+        exit 1
+    fi
+
+}
+
+# The real deal boys and girls
+for user in ${user_accounts[@]}; do
+    do_stuff "${jumphost}" "${user}"
+done
