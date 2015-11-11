@@ -1,0 +1,16 @@
+#!/bin/bash
+
+if [[ -z "$1" ]]; then echo "Usage: $0 [jumphost]"; exit 1; fi
+
+jumphost=$1
+duo_version="1.9.17-0"
+
+function download_and_install {
+    if [[ -z "$1" ]]; then echo "Usage: ${FUNCNAME} [jumphost hostname]"; return 1; fi
+
+    ssh -t ec2-user@${jumphost} "sudo wget -P /usr/local/src http://pkg.duosecurity.com/RedHat/7Server/x86_64/duo_unix-${duo_version}.x86_64.rpm" > /dev/null 2>&1
+    ssh -t ec2-user@${jumphost} "sudo rpm --import https://www.duosecurity.com/RPM-GPG-KEY-DUO" > /dev/null 2>&1
+    ssh -t ec2-user@${jumphost} "sudo rpm -i /usr/local/src/duo_unix-${duo_version}.x86_64.rpm" > /dev/null 2>&1
+}
+
+download_and_install "${jumphost}"

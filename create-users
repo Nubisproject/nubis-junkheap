@@ -1,8 +1,9 @@
 #!/bin/bash
 # quick and dirty way to create a user account on bastion host and adds ssh keys
 
- [ ! -f user-accounts ] && { echo "user-accounts file does not exist"; exit 1; }
-. user-accounts
+# Add user we want to add here
+declare -a user_accounts=(elim jcrowe pchiasson)
+declare -a no_sudo=()
 
 # useful stuff
 jumphost=$1
@@ -37,6 +38,16 @@ function __check_user {
 
 }
 
+function __add_to_sudo {
+    if [[  -z "$1" || -z "$2" ]]; then echo "Usage: ${FUNCNAME} [jumphost hostname] [username]"; return 1; fi
+
+    local jumphost=$1
+    local username=$2
+
+    ssh -t ec2-user@${jumphost} "sudo su - root -c 'echo \"${username}     ALL=(ALL)   NOPASSWD: ALL\" > /etc/sudoers.d/${username}'" > /dev/null 2>&1
+    ssh -t ec2-user@${jumphost} "sudo chown root:root /etc/sudoers.d/${username} && sudo chmod 0440 /etc/sudoers.d/${username}" > /dev/null 2>&1
+}
+
 # do the deed:
 # 1. create user but checks if user exists first
 # 2. create .ssh folder and  chowns it to the right owner
@@ -57,45 +68,56 @@ function do_stuff {
         ssh -t ec2-user@${jumphost} "sudo adduser ${username}" > /dev/null 2>&1
         ssh -t ec2-user@${jumphost} "sudo mkdir /home/${username}/.ssh && sudo chown -R ${username}:${username} /home/${username}/.ssh" > /dev/null 2>&1
         ssh -t ec2-user@${jumphost} "sudo touch /home/${username}/.ssh/authorized_keys" > /dev/null 2>&1
+        echo "Done"
 
-        # TODO: Need to figure out a way to filter  out folks to not get sudo
-        ssh -t ec2-user@${jumphost} "sudo su - root -c 'echo \"${username}     ALL=(ALL)   NOPASSWD: ALL\" > /etc/sudoers.d/${username}'" > /dev/null 2>&1
-        ssh -t ec2-user@${jumphost} "sudo chown root:root /etc/sudoers.d/${username} && sudo chmod 0440 /etc/sudoers.d/${username}" > /dev/null 2>&1
-
-        user_pub_key=$(mktemp ${username}.XXXXXXXX)
-        trap "rm -f ${user_pub_key}" EXIT
+        # if no_sudo array is empty just add users to sudo otherwise do comparison
+        if [[ -z "${no_sudo}" ]]; then
+            __add_to_sudo "${jumphost}" "${username}"
+        else
+            for nolove in ${no_sudo[@]}; do
+                if [[ "${nolove}" == "$username" ]]; then
+                    echo "User: ${username} gets no sudo love"
+                else
+                    __add_to_sudo "${jumphost}" "${username}"
+                fi
+            done
+        fi
 
         if $gen_key; then
+            user_pub_key=$(mktemp ${username}.XXXXXXXX)
+            trap "rm -f ${user_pub_key}" EXIT
+
             echo "Generating key with limed's awesome script"
             ${basedir}/keys.sh ${username}@mozilla.com > ${user_pub_key}
             #cat ${user_pub_key} | ssh -t -t ec2-user@${jumphost} "sudo su - root -c 'cat >> /home/${username}/.ssh/authorized_keys'"
             scp -pr ${user_pub_key}  ec2-user@${jumphost}:/tmp/${username}.pub
-            ssh -t ec2-user@${jumphost} "sudo mv /tmp/${username}.pub /home/${username}/.ssh/authorized_keys"
+            ssh -t ec2-user@${jumphost} "sudo mv /tmp/${username}.pub /home/${username}/.ssh/authorized_keys" > /dev/null 2>&1
+
+            rm -f ${user_pub_key}
         else
             echo "Nope, no love for limed"
             if [[ ! -d "${basedir}/ssh_keys" ]]; then
                 echo "Directory where we store ssh keys ${basedir}/ssh_keys does not exist"
             else
                 scp -pr ${basedir}/ssh_keys/${username}.pub  ec2-user@${jumphost}:/tmp/${username}.pub
-                ssh -t ec2-user@${jumphost} "sudo mv /tmp/${username}.pub /home/${username}/.ssh/authorized_keys"
+                ssh -t ec2-user@${jumphost} "sudo mv /tmp/${username}.pub /home/${username}/.ssh/authorized_keys" > /dev/null 2>&1
                 #cat ${basedir}/ssh_keys/${username}.pub | ssh -t -t ec2-user@${jumphost} "sudo su - root -c 'cat >> /home/${username}/.ssh/authorized_keys'"
             fi
         fi
-        ssh -t ec2-user@${jumphost} "sudo chown ${username}:${username} /home/${username}/.ssh/authorized_keys && sudo chmod 0600 /home/${username}/.ssh/authorized_keys"
-        echo "Done"
+        ssh -t ec2-user@${jumphost} "sudo chown ${username}:${username} /home/${username}/.ssh/authorized_keys && sudo chmod 0600 /home/${username}/.ssh/authorized_keys" > /dev/null 2>&1
         return 0
     else
-        echo "I think user ${username} already exists so I'm not doing anyway"
+        echo "I think user ${username} already exists so I'm not doing anything"
         return 1
     fi
 
 }
 
 # create group for duo-users
-ssh -t ec2-user@${jumphost} "sudo groupadd duo-users"
+ssh -t ec2-user@${jumphost} "sudo groupadd duo-users" > /dev/null 2>&1
 
 # The real deal boys and girls
 for user in ${user_accounts[@]}; do
     do_stuff "${jumphost}" "${user}"
-    ssh -t ec2-user@${jumphost} "sudo usermod -a -G duo-users ${user}"
+    ssh -t ec2-user@${jumphost} "sudo usermod -a -G duo-users ${user}" > /dev/null 2>&1
 done

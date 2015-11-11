@@ -1,2 +1,0 @@
-# Add user we want to add here
-declare -a user_accounts=(elim jcrowe pchiasson)
