@@ -68,6 +68,7 @@ function do_stuff {
         ssh -t ec2-user@${jumphost} "sudo adduser ${username}" > /dev/null 2>&1
         ssh -t ec2-user@${jumphost} "sudo mkdir /home/${username}/.ssh && sudo chown -R ${username}:${username} /home/${username}/.ssh" > /dev/null 2>&1
         ssh -t ec2-user@${jumphost} "sudo touch /home/${username}/.ssh/authorized_keys" > /dev/null 2>&1
+        echo "Done"
 
         # if no_sudo array is empty just add users to sudo otherwise do comparison
         if [[ -z "${no_sudo}" ]]; then
@@ -90,7 +91,7 @@ function do_stuff {
             ${basedir}/keys.sh ${username}@mozilla.com > ${user_pub_key}
             #cat ${user_pub_key} | ssh -t -t ec2-user@${jumphost} "sudo su - root -c 'cat >> /home/${username}/.ssh/authorized_keys'"
             scp -pr ${user_pub_key}  ec2-user@${jumphost}:/tmp/${username}.pub
-            ssh -t ec2-user@${jumphost} "sudo mv /tmp/${username}.pub /home/${username}/.ssh/authorized_keys"
+            ssh -t ec2-user@${jumphost} "sudo mv /tmp/${username}.pub /home/${username}/.ssh/authorized_keys" > /dev/null 2>&1
 
             rm -f ${user_pub_key}
         else
@@ -99,12 +100,11 @@ function do_stuff {
                 echo "Directory where we store ssh keys ${basedir}/ssh_keys does not exist"
             else
                 scp -pr ${basedir}/ssh_keys/${username}.pub  ec2-user@${jumphost}:/tmp/${username}.pub
-                ssh -t ec2-user@${jumphost} "sudo mv /tmp/${username}.pub /home/${username}/.ssh/authorized_keys"
+                ssh -t ec2-user@${jumphost} "sudo mv /tmp/${username}.pub /home/${username}/.ssh/authorized_keys" > /dev/null 2>&1
                 #cat ${basedir}/ssh_keys/${username}.pub | ssh -t -t ec2-user@${jumphost} "sudo su - root -c 'cat >> /home/${username}/.ssh/authorized_keys'"
             fi
         fi
-        ssh -t ec2-user@${jumphost} "sudo chown ${username}:${username} /home/${username}/.ssh/authorized_keys && sudo chmod 0600 /home/${username}/.ssh/authorized_keys"
-        echo "Done"
+        ssh -t ec2-user@${jumphost} "sudo chown ${username}:${username} /home/${username}/.ssh/authorized_keys && sudo chmod 0600 /home/${username}/.ssh/authorized_keys" > /dev/null 2>&1
         return 0
     else
         echo "I think user ${username} already exists so I'm not doing anything"
