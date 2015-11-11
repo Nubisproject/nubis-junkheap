@@ -59,10 +59,10 @@ function do_stuff {
         ssh -t ec2-user@${jumphost} "sudo touch /home/${username}/.ssh/authorized_keys" > /dev/null 2>&1
 
         # TODO: Need to figure out a way to filter  out folks to not get sudo
-        ssh -t ec2-user@${jumphost} "sudo su - root -c 'echo \"${username}     ALL=(ALL)   NOPASSWD: ALL\" > /etc/sudoers.d/${username}'"
-        ssh -t ec2-user@${jumphost} "sudo chown root:root /etc/sudoers.d/${username} && sudo chmod 0440 /etc/sudoers.d/${username}"
+        ssh -t ec2-user@${jumphost} "sudo su - root -c 'echo \"${username}     ALL=(ALL)   NOPASSWD: ALL\" > /etc/sudoers.d/${username}'" > /dev/null 2>&1
+        ssh -t ec2-user@${jumphost} "sudo chown root:root /etc/sudoers.d/${username} && sudo chmod 0440 /etc/sudoers.d/${username}" > /dev/null 2>&1
 
-        local user_pub_key=$(mktemp ${username}.XXXXXXXX)
+        user_pub_key=$(mktemp ${username}.XXXXXXXX)
         trap "rm -f ${user_pub_key}" EXIT
 
         if $gen_key; then
@@ -91,7 +91,11 @@ function do_stuff {
 
 }
 
+# create group for duo-users
+ssh -t ec2-user@${jumphost} "sudo groupadd duo-users"
+
 # The real deal boys and girls
 for user in ${user_accounts[@]}; do
     do_stuff "${jumphost}" "${user}"
+    ssh -t ec2-user@${jumphost} "sudo usermod -a -G duo-users ${user}"
 done
