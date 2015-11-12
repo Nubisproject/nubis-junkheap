@@ -3,14 +3,71 @@
 if [[ -z "$1" ]]; then echo "Usage: $0 [jumphost]"; exit 1; fi
 
 jumphost=$1
-duo_version="1.9.17-0"
+duo_version="1.9.11-1"
+
+# Red colored echo
+# usage: echo_red "message"
+function echo_red {
+    echo -e "\033[0;31m$1\033[0m"
+}
 
 function download_and_install {
     if [[ -z "$1" ]]; then echo "Usage: ${FUNCNAME} [jumphost hostname]"; return 1; fi
 
-    ssh -t ec2-user@${jumphost} "sudo wget -P /usr/local/src http://pkg.duosecurity.com/RedHat/7Server/x86_64/duo_unix-${duo_version}.x86_64.rpm" > /dev/null 2>&1
+    ssh -t ec2-user@${jumphost} "sudo wget -P /usr/local/src https://s3-us-west-2.amazonaws.com/nubis-stacks/packages/rpm/duo_unix-${duo_version}.x86_64.rpm" > /dev/null 2>&1
     ssh -t ec2-user@${jumphost} "sudo rpm --import https://www.duosecurity.com/RPM-GPG-KEY-DUO" > /dev/null 2>&1
     ssh -t ec2-user@${jumphost} "sudo rpm -i /usr/local/src/duo_unix-${duo_version}.x86_64.rpm" > /dev/null 2>&1
 }
 
-download_and_install "${jumphost}"
+function ssh_instructions {
+    echo_red "At this point you probably need to first configure sshd so first you                                      "
+    echo_red "need to edit /etc/ssh/sshd_config                                                                         "
+    echo_red ""
+    echo_red "If you want to use pam_duo with OpenSSH sshd, set both UsePAM and ChallengeResponseAuthentication to yes  "
+    echo_red "in your sshd_config. You should also set UseDNS to no so that PAM Duo is always passed the IP address of  "
+    echo_red "the connecting user, rather than the resolved hostname.                                                   "
+    echo_red ""
+    echo_red "      UsePAM yes                          "
+    echo_red "      ChallengeResponseAuthentication yes "
+    echo_red "      UseDNS no                           "
+    echo_red ""
+    echo_red "      PubkeyAuthentication yes                                "
+    echo_red "      PasswordAuthentication no                               "
+    echo_red "      AuthenticationMethods publickey,keyboard-interactive    "
+}
+
+function pam_instructions {
+    echo_red "Now you need to edit your pam configs                                 "
+    echo_red "You will just need to add the 'auth   required    pam_duo.so' line    "
+    echo_red "After some of the lines                                               "
+    echo_red ""
+    echo_red "      /etc/pam.d/system-auth                                          "
+    echo_red ""
+    echo_red "      Before:                                                         "
+    echo_red "          auth required    pam_env.so                                 "
+    echo_red "          auth    sufficient  pam_unix.so nullok try_first_pass       "
+    echo_red "          auth    requisite   pam_succeed_if.so uid >= 500 quiet      "
+    echo_red "          auth    required    pam_deny.so                             "
+    echo_red ""
+    echo_red "      After:                                                          "
+    echo_red "          auth required    pam_env.so                                 "
+    echo_red "          auth    requisite   pam_unix.so nullok try_first_pass       "
+    echo_red "          auth    sufficient  pam_duo.so                              "
+    echo_red "          auth    requisite   pam_succeed_if.so uid >= 500 quiet      "
+    echo_red "          auth    required    pam_deny.so                             "
+    echo_red ""
+    echo_red ""
+    echo_red "      /etc/pam.d/sshd                                                 "
+    echo_red ""
+    echo_red "      Before:                                                         "
+    echo_red "          auth    required    pam_sepermit.so                         "
+    echo_red "          auth    substack    password-auth                           "
+    echo_red ""
+    echo_red "      After:                                                          "
+    echo_red "          auth    required    pam_sepermit.so                         "
+    echo_red "          auth    required    pam_duo.so                              "
+
+}
+
+pam_instructions
+#download_and_install "${jumphost}"
