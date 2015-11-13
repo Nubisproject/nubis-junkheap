@@ -33,38 +33,38 @@ Edit `/etc/pam.d/system-auth`, note you only need to add the auth line for duo a
 
 Before:
 
-    ```bash
-    auth required    pam_env.so
-    auth    sufficient  pam_unix.so nullok try_first_pass
-    auth    requisite   pam_succeed_if.so uid >= 500 quiet
-    auth    required    pam_deny.so
-    ```
+```bash
+auth required    pam_env.so
+auth    sufficient  pam_unix.so nullok try_first_pass
+auth    requisite   pam_succeed_if.so uid >= 500 quiet
+auth    required    pam_deny.so
+```
 
 After:
 
-    ```bash
-    auth required    pam_env.so
-    auth    requisite   pam_unix.so nullok try_first_pass
-    auth    sufficient  pam_duo.so
-    auth    requisite   pam_succeed_if.so uid >= 500 quiet
-    auth    required    pam_deny.so
-    ```
+```bash
+auth required    pam_env.so
+auth    requisite   pam_unix.so nullok try_first_pass
+auth    sufficient  pam_duo.so
+auth    requisite   pam_succeed_if.so uid >= 500 quiet
+auth    required    pam_deny.so
+```
 
 Edit `/etc/pam.d/sshd` and same as about just add the auth pam_duo.so line
 
 Before:
 
-    ```bash
-    auth    required    pam_sepermit.so
-    auth    substack    password-auth
-    ```
+```bash
+auth    required    pam_sepermit.so
+auth    substack    password-auth
+```
 
 After:
 
-    ```bash
-    auth    required    pam_sepermit.so
-    auth    required    pam_duo.so
-    ```
+```bash
+auth    required    pam_sepermit.so
+auth    required    pam_duo.so
+```
 
 At this point you are done and you just need to restart sshd by running `service sshd restart` and try logging in from a seperate terminal to your account.
 
