@@ -2,8 +2,8 @@
 # quick and dirty way to create a user account on bastion host and adds ssh keys
 
 # Add user we want to add here
-declare -a user_accounts=(elim jcrowe pchiasson)
-declare -a no_sudo=()
+declare -a user_accounts=(elim jcrowe pchiasson scabral mpressman dlawrence)
+declare -a no_sudo=(scabral mpressman dlawrence)
 
 # useful stuff
 jumphost=$1
