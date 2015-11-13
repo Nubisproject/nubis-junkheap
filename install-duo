@@ -17,6 +17,7 @@ function download_and_install {
     ssh -t ec2-user@${jumphost} "sudo wget -P /usr/local/src https://s3-us-west-2.amazonaws.com/nubis-stacks/packages/rpm/duo_unix-${duo_version}.x86_64.rpm" > /dev/null 2>&1
     ssh -t ec2-user@${jumphost} "sudo rpm --import https://www.duosecurity.com/RPM-GPG-KEY-DUO" > /dev/null 2>&1
     ssh -t ec2-user@${jumphost} "sudo rpm -i /usr/local/src/duo_unix-${duo_version}.x86_64.rpm" > /dev/null 2>&1
+    ssh -t ec2-user@${jumphost} "sudo chmod 0600 /etc/duo/*.conf" > /dev/null 2>&1
 }
 
 function ssh_instructions {
@@ -69,5 +70,4 @@ function pam_instructions {
 
 }
 
-pam_instructions
-#download_and_install "${jumphost}"
+download_and_install "${jumphost}"
