@@ -67,3 +67,7 @@ After:
     ```
 
 At this point you are done and you just need to restart sshd by running `service sshd restart` and try logging in from a seperate terminal to your account.
+
+
+#### WIP
+I'm working on writing some puppet modules for this.
