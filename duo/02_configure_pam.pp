@@ -3,7 +3,7 @@ $duo_pam_module             = '/lib64/security/pam_duo.so'
 $aug_system_auth_pam_path   = '/files/etc/pam.d/system-auth'
 $aug_system_auth_match      = "${aug_system_auth_pam_path}/*/module[. = '${duo_pam_module}']"
 $aug_sshd_pam_path          = '/files/etc/pam.d/sshd'
-$aug_sshd_match             = "${aug_sshd_pam_path}/*/module[. = '${pam_module}']"
+$aug_sshd_match             = "${aug_sshd_pam_path}/*/module[. = '${duo_pam_module}']"
 
 augeas { 'PAM system-auth Configuration':
     changes => [
