@@ -1,0 +1,57 @@
+#!/bin/bash
+# Configuring duo
+
+function configure_duo() {
+    echo "Configuring pam for duo"
+    for file in 01_configure_sshd.pp 02_configure_pam.pp; do
+        wget -P /tmp https://github.com/nubisproject/nubis-junkheap/blob/master/duo/${file}
+        RV=$?
+        if [ ${RV} -ne 0 ]; then
+            echo "Could not download ${file}"
+            exit 1
+        fi
+    done
+
+    if [ $? -ne 0 ]; then
+        echo "Something happened, can't configure duo"
+        exit 1
+    fi
+
+    puppet apply /tmp/01_configure_sshd.pp
+    puppet apply /tmp/02_configure_pam.pp
+}
+
+whoami=$(whoami)
+if [ "${whoami}" != root ]; then
+    echo "Please run as root"
+    exit 1
+fi
+
+duo_package=$(/bin/rpm -qa | grep duo_unix | grep -v grep)
+if [ -z "${duo_package}" ]; then
+    echo "Duo package not installed"
+    exit 1
+fi
+
+if [ ! -f "/etc/confd/conf.d/duo.toml" ]; then
+    echo "confd duo.toml file doesn't exist"
+    exit 1
+fi
+
+if [ ! -f "/etc/confd/templates/duo.tmpl" ]; then
+    echo "confd duo.tmpl doesn't exist"
+    exit 1
+fi
+
+echo "Stop! before you do anything else please make sure you have an existing non duo connection open to the server"
+sleep 3
+echo -n "Ok, now do you have a connection open? [y/n]: "
+read -p answer
+
+if [ ${answer} == "y" ]; then
+    configure_duo
+else
+    echo "Can't configure duo"
+    exit 1
+fi
+
