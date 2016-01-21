@@ -25,6 +25,20 @@ augeas { 'PAM sshd configuration':
     ],
     onlyif => "match ${aug_sshd_match} size == 0",
     notify => Service['sshd'],
+} ->
+exec { 'comment_pam_line':
+    path      => '/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin:/sbin:/bin',
+    command   => "sed -i -r 's/^(auth.*substack.*password-auth)$/#\\1/g' /etc/pam.d/sshd",
+    unless    => "egrep -q '^#auth.*substack.*password-auth\$' /etc/pam.d/sshd",
+    logoutput => 'on_failure',
+    notify  => Service['sshd']
+}
+
+file { '/etc/duo/pam_duo.conf':
+    ensure => file,
+    owner  => root,
+    group  => root,
+    mode   => '0400',
 }
 
 service { 'sshd':
