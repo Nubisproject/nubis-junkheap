@@ -4,7 +4,7 @@
 function configure_duo() {
     echo "Configuring pam for duo"
     for file in 01_configure_sshd.pp 02_configure_pam.pp; do
-        wget -P /tmp https://github.com/nubisproject/nubis-junkheap/blob/master/duo/${file}
+        wget -P /tmp https://raw.githubusercontent.com/nubisproject/nubis-junkheap/master/duo/${file}
         RV=$?
         if [ ${RV} -ne 0 ]; then
             echo "Could not download ${file}"
