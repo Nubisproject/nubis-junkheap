@@ -46,9 +46,9 @@ fi
 echo "Stop! before you do anything else please make sure you have an existing non duo connection open to the server"
 sleep 3
 echo -n "Ok, now do you have a connection open? [y/n]: "
-read -p answer
+read answer
 
-if [ ${answer} == "y" ]; then
+if echo "$answer" | grep -iq "^y" ;then
     configure_duo
 else
     echo "Can't configure duo"
