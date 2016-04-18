@@ -19,6 +19,14 @@
 #    * originmaster 017748c [origin/master] Initial commit
 #
 
+
+# TODO: nubis-skel (et all) build data is still getting stripped off
+# TODO: nubis-nat template in nubis-stacks is not updating the AMIs correctly
+# TODO: nubis-storage template in nubis-stacks is not updating the AMIs correctly
+# TODO: nubis-nat & nubis-storage template upload to S3 is not working
+# TODO: Upload lambda functions to S3
+
+
 NUBIS_PATH='/home/jason/projects/mozilla/projects/nubis'
 GITHUB_LOGIN='tinnightcap'
 #GITHUB_ORGINIZATION='tinnightcap'
@@ -27,10 +35,10 @@ PROFILE='default'
 set -o pipefail
 
 # List of repositories that will be excluded form the release
-declare -a RELEASE_EXCLUDES=( nubis-elasticsearch nubis-elk nubis-ha-nat nubis-junkheap nubis-meta nubis-puppet-consul-do nubis-puppet-consul-replicate nubis-puppet-envconsul nubis-wrapper nubis-mediawiki nubis-jumphost nubis-dpaste )
+declare -a RELEASE_EXCLUDES=( nubis-elasticsearch nubis-elk nubis-ha-nat nubis-junkheap nubis-meta nubis-proxy nubis-puppet-consul-replicate nubis-puppet-envconsul nubis-siege nubis-vpc nubis-wrapper )
 
 # List of infrastructure projects that need to be rebuilt from nubis-base during a release
-declare -a INFRASTRUCTURE_ARRAY=( nubis-ci nubis-consul nubis-dpaste nubis-fluent-collector nubis-jumphost nubis-mediawiki nubis-proxy nubis-skel nubis-storage )
+declare -a INFRASTRUCTURE_ARRAY=( nubis-ci nubis-consul nubis-dpaste nubis-fluent-collector nubis-jumphost nubis-mediawiki nubis-nat nubis-skel nubis-storage )
 
 declare -a REPOSITORY_ARRAY
 
@@ -79,7 +87,7 @@ test_for_github_changelog_generator () {
 
 get_repositories () {
     # Gather the list of repositories in the nubisproject from GitHub
-    REPOSITORY_LIST=$(curl -s https://api.github.com/orgs/nubisproject/repos | jq -r '.[].name' | sort)
+    REPOSITORY_LIST=$(curl -s https://api.github.com/orgs/nubisproject/repos?per_page=100 | jq -r '.[].name' | sort)
 
     # Format the list into an array
     for REPO in ${REPOSITORY_LIST}; do
@@ -145,51 +153,51 @@ update_all_repositories () {
 
 get_set_milestone () {
     milestone_open () {
-        ghi milestone --list -- "${GITHUB_ORGINIZATION}"/"${__REPOSITORY}" | grep "${__MILESTONE}" | cut -d':' -f 1 | sed -e 's/^[[:space:]]*//'
+        ghi milestone --list -- "${GITHUB_ORGINIZATION}"/"${_REPOSITORY}" | grep "${_MILESTONE}" | cut -d':' -f 1 | sed -e 's/^[[:space:]]*//'
     }
     milestone_closed () {
-        ghi milestone --list --closed -- "${GITHUB_ORGINIZATION}"/"${__REPOSITORY}" | grep "${__MILESTONE}" | cut -d':' -f 1 | sed -e 's/^[[:space:]]*//'
+        ghi milestone --list --closed -- "${GITHUB_ORGINIZATION}"/"${_REPOSITORY}" | grep "${_MILESTONE}" | cut -d':' -f 1 | sed -e 's/^[[:space:]]*//'
     }
     test_for_ghi
-    local __MILESTONE="${1}"
-    local __REPOSITORY="${2}"
+    local _MILESTONE="${1}"
+    local _REPOSITORY="${2}"
     # First check to see if we have an open milestone
-    __MILESTONE_NUMBER=$(milestone_open)
-    if [ "${__MILESTONE_NUMBER:-NULL}" != 'NULL' ]; then
-        echo "${__MILESTONE_NUMBER}"
+    _MILESTONE_NUMBER=$(milestone_open)
+    if [ "${_MILESTONE_NUMBER:-NULL}" != 'NULL' ]; then
+        echo "${_MILESTONE_NUMBER}"
         return
     fi
     # Next check to see if we have the milestone but it is closed
-    __MILESTONE_NUMBER=$(milestone_closed)
-    if [ "${__MILESTONE_NUMBER:-NULL}" != 'NULL' ]; then
-        echo "${__MILESTONE_NUMBER}"
+    _MILESTONE_NUMBER=$(milestone_closed)
+    if [ "${_MILESTONE_NUMBER:-NULL}" != 'NULL' ]; then
+        echo "${_MILESTONE_NUMBER}"
         return
     fi
     # Finally create the milestone as it does not appear to exist
-    __MILESTONE_NUMBER=$(ghi milestone -m "${__MILESTONE}" -- "${GITHUB_ORGINIZATION}"/"${__REPOSITORY}"  | cut -d'#' -f 2 | cut -d' ' -f 1)
-    echo "${__MILESTONE_NUMBER}"
+    _MILESTONE_NUMBER=$(ghi milestone -m "${_MILESTONE}" -- "${GITHUB_ORGINIZATION}"/"${_REPOSITORY}"  | cut -d'#' -f 2 | cut -d' ' -f 1)
+    echo "${_MILESTONE_NUMBER}"
     return
 }
 
 create_milestones () {
-    local __RELEASE="${1}"
-    if [ ${__RELEASE:-NULL} == 'NULL' ]; then
+    local _RELEASE="${1}"
+    if [ ${_RELEASE:-NULL} == 'NULL' ]; then
         echo "Relesae nubber required"
         $0 help
         exit 1
     fi
     get_repositories
-    local __COUNT=1
+    local _COUNT=1
     for REPOSITORY in ${REPOSITORY_ARRAY[*]}; do
         if [[ " ${RELEASE_EXCLUDES[@]} " =~ " ${REPOSITORY} " ]]; then
-            echo -e "\n Skipping \"${REPOSITORY}\" as it is in the excludes list. (${__COUNT} of ${#REPOSITORY_ARRAY[*]})"
+            echo -e "\n Skipping \"${REPOSITORY}\" as it is in the excludes list. (${_COUNT} of ${#REPOSITORY_ARRAY[*]})"
             let COUNT=${COUNT}+1
         else
-            echo -e "\n Creating milestone in \"${REPOSITORY}\". (${__COUNT} of ${#REPOSITORY_ARRAY[*]})"
-            local __RELEASE="${1}"
-            local __MILESTONE=$(get_set_milestone "${__RELEASE}" "${REPOSITORY}")
-            echo " Got milestone number \"${__MILESTONE}\"."
-            let __COUNT=${__COUNT}+1
+            echo -e "\n Creating milestone in \"${REPOSITORY}\". (${_COUNT} of ${#REPOSITORY_ARRAY[*]})"
+            local _RELEASE="${1}"
+            local _MILESTONE=$(get_set_milestone "${_RELEASE}" "${REPOSITORY}")
+            echo " Got milestone number \"${_MILESTONE}\"."
+            let _COUNT=${_COUNT}+1
         fi
     done
     unset REPOSITORY
@@ -197,76 +205,76 @@ create_milestones () {
 
 file_issue () {
     test_for_ghi
-    local __REPOSITORY="${1}"
-    local __ISSUE_TITLE="${2}"
-    local __ISSUE_BODY="${3}"
-    local __MILESTONE="${4}"
-    ghi open --message "${__ISSUE_BODY}" "${__ISSUE_TITLE}" --milestone "${__MILESTONE}" -- "${GITHUB_ORGINIZATION}"/"${__REPOSITORY}"
+    local _REPOSITORY="${1}"
+    local _ISSUE_TITLE="${2}"
+    local _ISSUE_BODY="${3}"
+    local _MILESTONE="${4}"
+    ghi open --message "${_ISSUE_BODY}" "${_ISSUE_TITLE}" --milestone "${_MILESTONE}" -- "${GITHUB_ORGINIZATION}"/"${_REPOSITORY}"
 }
 
 file_release_issues () {
-    local __RELEASE="${1}"
-    if [ ${__RELEASE:-NULL} == 'NULL' ]; then
+    local _RELEASE="${1}"
+    if [ ${_RELEASE:-NULL} == 'NULL' ]; then
         echo "Relesae number required"
         $0 help
         exit 1
     fi
     get_repositories
-    local __COUNT=1
+    local _COUNT=1
     for REPOSITORY in ${REPOSITORY_ARRAY[*]}; do
         if [[ " ${RELEASE_EXCLUDES[@]} " =~ " ${REPOSITORY} " ]]; then
-            echo -e "\n Skipping \"${REPOSITORY}\" as it is in the excludes list. (${__COUNT} of ${#REPOSITORY_ARRAY[*]})"
+            echo -e "\n Skipping \"${REPOSITORY}\" as it is in the excludes list. (${_COUNT} of ${#REPOSITORY_ARRAY[*]})"
             let COUNT=${COUNT}+1
         else
-            echo -e "\n Filing release issue in \"${REPOSITORY}\". (${__COUNT} of ${#REPOSITORY_ARRAY[*]})"
-            local __RELEASE="${1}"
-            local __ISSUE_TITLE="Tag ${__RELEASE} release"
-            local __ISSUE_BODY="Tag a release of the ${REPOSITORY} repository for the ${__RELEASE} release of the Nubis project."
-            local __MILESTONE=$(get_set_milestone "${__RELEASE}" "${REPOSITORY}")
-            file_issue "${REPOSITORY}" "${__ISSUE_TITLE}" "${__ISSUE_BODY}" "${__MILESTONE}"
-            let __COUNT=${__COUNT}+1
+            echo -e "\n Filing release issue in \"${REPOSITORY}\". (${_COUNT} of ${#REPOSITORY_ARRAY[*]})"
+            local _RELEASE="${1}"
+            local _ISSUE_TITLE="Tag ${_RELEASE} release"
+            local _ISSUE_BODY="Tag a release of the ${REPOSITORY} repository for the ${_RELEASE} release of the Nubis project."
+            local _MILESTONE=$(get_set_milestone "${_RELEASE}" "${REPOSITORY}")
+            file_issue "${REPOSITORY}" "${_ISSUE_TITLE}" "${_ISSUE_BODY}" "${_MILESTONE}"
+            let _COUNT=${_COUNT}+1
         fi
     done
     unset REPOSITORY
 }
 
 merge_changes () {
-    local __REPOSITORY=${1}
+    local _REPOSITORY=${1}
     echo "Merge pull-request? [y/N]"
     read CONTINUE
     if [ ${CONTINUE:-n} == "Y" ] || [ ${CONTINUE:-n} == "y" ]; then
         # Switch to the originmaster branch and merge the pull-request
-        cd "${NUBIS_PATH}/${__REPOSITORY}" && git checkout originmaster
-        cd "${NUBIS_PATH}/${__REPOSITORY}" && git pull
-        cd "${NUBIS_PATH}/${__REPOSITORY}" && git merge --no-ff master -m "Merge branch 'master' into originmaster"
-        cd "${NUBIS_PATH}/${__REPOSITORY}" && git push origin HEAD:master
-        cd "${NUBIS_PATH}/${__REPOSITORY}" && git checkout master
+        cd "${NUBIS_PATH}/${_REPOSITORY}" && git checkout originmaster
+        cd "${NUBIS_PATH}/${_REPOSITORY}" && git pull
+        cd "${NUBIS_PATH}/${_REPOSITORY}" && git merge --no-ff master -m "Merge branch 'master' into originmaster"
+        cd "${NUBIS_PATH}/${_REPOSITORY}" && git push origin HEAD:master
+        cd "${NUBIS_PATH}/${_REPOSITORY}" && git checkout master
     fi
 }
 
 check_in_changes () {
-    local __REPOSITORY=${1}
-    local __MESSAGE=${2}
-    local __FILE=${3}
-    if [ ${__FILE:-NULL} == 'NULL' ]; then
-        local __FILE='.'
+    local _REPOSITORY=${1}
+    local _MESSAGE=${2}
+    local _FILE=${3}
+    if [ ${_FILE:-NULL} == 'NULL' ]; then
+        local _FILE='.'
     fi
-    echo "Check in changes for \"${__REPOSITORY}\" to: \"${__FILE}\"? [Y/n]"
+    echo "Check in changes for \"${_REPOSITORY}\" to: \"${_FILE}\"? [Y/n]"
     read CONTINUE
     if [ ${CONTINUE:-y} == "Y" ] || [ ${CONTINUE:-y} == "y" ]; then
-        cd "${NUBIS_PATH}/${__REPOSITORY}" && git add ${__FILE}
-        cd "${NUBIS_PATH}/${__REPOSITORY}" && git commit -m "${__MESSAGE}"
-        cd "${NUBIS_PATH}/${__REPOSITORY}" && git push
+        cd "${NUBIS_PATH}/${_REPOSITORY}" && git add ${_FILE}
+        cd "${NUBIS_PATH}/${_REPOSITORY}" && git commit -m "${_MESSAGE}"
+        cd "${NUBIS_PATH}/${_REPOSITORY}" && git push
         # GitHub is sometimes a bit slow here
         sleep 3
-        cd "${NUBIS_PATH}/${__REPOSITORY}" && hub pull-request -m "${__MESSAGE}"
+        cd "${NUBIS_PATH}/${_REPOSITORY}" && hub pull-request -m "${_MESSAGE}"
 
-        merge_changes "${__REPOSITORY}"
+        merge_changes "${_REPOSITORY}"
     fi
 }
 
 build_instructions () {
-    echo "RELEASE='v1.0.1'"
+    echo "RELEASE='v1.1.0'"
     echo "$0 update-all"
     echo "$0 --profile nubis-market upload-stacks \${RELEASE}"
     echo "$0 build-infrastructure \${RELEASE}"
@@ -275,8 +283,8 @@ build_instructions () {
 
 # Upload nubis-stacks to release folder
 upload_stacks () {
-    local __RELEASE="${1}"
-    if [ ${__RELEASE:-NULL} == 'NULL' ]; then
+    local _RELEASE="${1}"
+    if [ ${_RELEASE:-NULL} == 'NULL' ]; then
         echo "Relesae number required"
         $0 help
         exit 1
@@ -302,17 +310,22 @@ upload_stacks () {
     done
     unset TEMPLATE
 
-    local __COUNT=1
+    local _COUNT=1
     for TEMPLATE in ${TEMPLATE_ARRAY[*]}; do
-        echo -e "Updating StacksVersion in \"${TEMPLATE}\". (${__COUNT} of ${#TEMPLATE_ARRAY[*]})"
-        cat "${TEMPLATE}" | jq ".Parameters.StacksVersion.Default|=\"${__RELEASE}\"" | sponge "${TEMPLATE}"
-        let __COUNT=${__COUNT}+1
+        local _EDIT_VERSION=$(cat ${TEMPLATE} | jq --raw-output '"\(.Parameters.StacksVersion.Default)"')
+        if [ ${_EDIT_VERSION:-0} != "null" ]; then
+            echo -e "Updating StacksVersion in \"${TEMPLATE}\". (${_COUNT} of ${#TEMPLATE_ARRAY[*]})"
+            cat "${TEMPLATE}" | jq ".Parameters.StacksVersion.Default|=\"${_RELEASE}\"" | sponge "${TEMPLATE}"
+        else
+            echo -e "StacksVersion unset in \"${TEMPLATE}\". (${_COUNT} of ${#TEMPLATE_ARRAY[*]})"
+        fi
+        let _COUNT=${_COUNT}+1
     done
     unset TEMPLATE
 
-    cd ${NUBIS_PATH}/nubis-stacks && bin/upload_to_s3 --profile ${PROFILE} --path "${__RELEASE}" push
+    cd ${NUBIS_PATH}/nubis-stacks && bin/upload_to_s3 --profile ${PROFILE} --path "${_RELEASE}" push
     if [ $? != '0' ]; then
-        echo "Uploads for ${__RELEASE} failed."
+        echo "Uploads for ${_RELEASE} failed."
         echo "Aborting....."
         exit 1
     fi
@@ -321,9 +334,9 @@ upload_stacks () {
 
 # Update StacksVersion to the current release
 edit_main_json () {
-    local __RELEASE="${1}"
-    local __REPOSITORY="${2}"
-    if [ ${__RELEASE:-NULL} == 'NULL' ]; then
+    local _RELEASE="${1}"
+    local _REPOSITORY="${2}"
+    if [ ${_RELEASE:-NULL} == 'NULL' ]; then
         echo "Relesae number required"
         $0 help
         exit 1
@@ -332,11 +345,51 @@ edit_main_json () {
     test_for_sponge
     # Necessary to skip older repositories that are still using Terraform for deployments
     #+ Just silently skip the edit
-    local __FILE="${NUBIS_PATH}/${__REPOSITORY}/nubis/cloudformation/main.json"
-    if [ -f "${__FILE}" ]; then
-        echo -e "Updating StacksVersion in \"${__FILE}\"."
-        cat "${__FILE}" | jq ".Parameters.StacksVersion.Default|=\"${__RELEASE}\"" | sponge "${__FILE}"
-        check_in_changes "${__REPOSITORY}" "Update StacksVersion for ${RELEASE} release" "${__FILE}"
+    local _FILE="${NUBIS_PATH}/${_REPOSITORY}/nubis/cloudformation/main.json"
+    if [ -f "${_FILE}" ]; then
+        local _EDIT_VERSION=$(cat ${_FILE} | grep -c 'StacksVersion')
+        if [ ${_EDIT_VERSION:-0} -ge 1 ]; then
+            echo -e "Updating StacksVersion in \"${_FILE}\"."
+            cat "${_FILE}" | jq ".Parameters.StacksVersion.Default|=\"${_RELEASE}\"" | sponge "${_FILE}"
+#            check_in_changes "${_REPOSITORY}" "Update StacksVersion for ${_RELEASE} release" "${_FILE}"
+        fi
+    fi
+}
+
+# Update project_versoin to the current release
+edit_project_json () {
+    local _RELEASE="${1}"
+    local _REPOSITORY="${2}"
+    if [ ${_RELEASE:-NULL} == 'NULL' ]; then
+        echo "Relesae number required"
+        $0 help
+        exit 1
+    fi
+    test_for_jq
+    test_for_sponge
+    local _FILE="${NUBIS_PATH}/${_REPOSITORY}/nubis/builder/project.json"
+    if [ -f "${_FILE}" ]; then
+        local _EDIT_PROJECT_VERSION=$(cat ${_FILE} | grep -c 'project_version')
+        if [ ${_EDIT_PROJECT_VERSION:-0} -ge 1 ]; then
+            echo -e "Updating project_version in \"${_FILE}\"."
+            # Preserve any build data appended to the version 
+            local _BUILD=$(cat ${_FILE} | jq --raw-output '"\(.variables.project_version)"' | cut -d'_' -f2-)
+            cat "${_FILE}" | jq ".variables.project_version|=\"${_RELEASE}${_BUILD:+_${_BUILD}}\"" | sponge "${_FILE}"
+        else
+            echo -e "Variable project_version does not exist in \"${_FILE}\"."
+            echo "Contine? [y/N]"
+            read CONTINUE
+            if [ ${CONTINUE:-n} == "N" ] || [ ${CONTINUE:-n} == "n" ]; then
+                echo "Aborting....."
+                exit 1
+            fi
+            continue
+        fi
+        local _EDIT_SOURCE=$(cat ${_FILE} | grep -c 'source_ami_project_version')
+        if [ ${_EDIT_SOURCE:-0} -ge 1 ]; then
+            cat "${_FILE}" | jq ".variables.source_ami_project_version|=\"${_RELEASE}\"" | sponge "${_FILE}"
+        fi
+#        check_in_changes "${_REPOSITORY}" "Update project_version for ${_RELEASE} release" "${_FILE}"
     fi
 }
 
@@ -349,7 +402,7 @@ edit_storage_template () {
     cat "${_FILE}" |\
     jq ".Mappings.AMIs.\"us-west-2\".AMI |=\"${_US_WEST_2}\"" |\
     jq ".Mappings.AMIs.\"us-east-1\".AMI |=\"${_US_EAST_1}\"" |\
-    sponge "${__FILE}"
+    sponge "${_FILE}"
 
     check_in_changes 'nubis-storage' "Update storage AMI Ids for ${_RELEASE} release" 'nubis/cloudformation/main.json'
 
@@ -360,6 +413,23 @@ edit_storage_template () {
 
     echo "Uploading updated storage.template to S3."
     cd ${NUBIS_PATH}/nubis-stacks && bin/upload_to_s3 --profile ${PROFILE} --path "${_RELEASE}" push storage.template
+}
+
+# This is a special edit to update an AMI mapping in nubis-nat in nubis-stacks
+edit_nat_template () {
+    local _RELEASE="${1}"
+    local _US_EAST_1="${2}"
+    local _US_WEST_2="${3}"
+    local _FILE="${NUBIS_PATH}/nubis-stacks/vpc/vpc-nat.template"
+    cat "${_FILE}" |\
+    jq ".Mappings.AMIs.\"us-west-2\".AMIs |=\"${_US_WEST_2}\"" |\
+    jq ".Mappings.AMIs.\"us-east-1\".AMIs |=\"${_US_EAST_1}\"" |\
+    sponge "${_FILE}"
+
+    check_in_changes 'nubis-stacks' "Update nat AMI Ids for ${_RELEASE} release" 'vpc/vpc-nat.template'
+
+    echo "Uploading updated storage.template to S3."
+    cd ${NUBIS_PATH}/nubis-stacks && bin/upload_to_s3 --profile ${PROFILE} --path "${_RELEASE}" push vpc/vpc-nat.template
 }
 
 # Build new AMIs for the named repository
@@ -378,6 +448,8 @@ build_amis () {
     fi
     test_for_nubis_builder
     edit_main_json "${_RELEASE}" "${_REPOSITORY}"
+    edit_project_json "${_RELEASE}" "${_REPOSITORY}"
+#    check_in_changes "${_REPOSITORY}" "Update versions for ${_RELEASE} release"
     echo "Running nubis-builder...."
     exec 5>&1
     OUTPUT=$(cd "${NUBIS_PATH}/${_REPOSITORY}" && nubis-builder build | tee >(cat - >&5))
@@ -393,14 +465,22 @@ build_amis () {
     exec 5>&-
     # nubis-builder outputs the AMI IDs to a file. Lets check it in here
     # Lets blow away the silly project.json updates first
-    cd "${NUBIS_PATH}/${_REPOSITORY}" && git checkout . 'nubis/builder/project.json'
-    check_in_changes "${_REPOSITORY}" "Update AMI IDs file for ${RELEASE} release" 'nubis/builder/AMIs'
+#    cd "${NUBIS_PATH}/${_REPOSITORY}" && git checkout . 'nubis/builder/project.json'
+#    check_in_changes "${_REPOSITORY}" "Update builder artifacts for ${RELEASE} release" "nubis/builder/artifacts/${RELEASE}/*"
+    check_in_changes "${_REPOSITORY}" "Update builder artifacts for ${RELEASE} release"
 
     # Special hook for nubis-storage
     if [ ${_REPOSITORY:-NULL} == 'nubis-storage' ]; then
         local _US_EAST_1=$(echo ${OUTPUT} | tail --quiet --lines=2 | grep 'us-east-1' | cut -d ':' -f 2 | sed -e 's/^[[:space:]]*//')
         local _US_WEST_2=$(echo ${OUTPUT} | tail --quiet --lines=2 | grep 'us-west-2' | cut -d ':' -f 2 | sed -e 's/^[[:space:]]*//')
         edit_storage_template "${_RELEASE}" "${_US_EAST_1}" "${_US_WEST_2}"
+    fi
+
+    # Special hook for nubis-nat
+    if [ ${_REPOSITORY:-NULL} == 'nubis-nat' ]; then
+        local _US_EAST_1=$(echo ${OUTPUT} | tail --quiet --lines=2 | grep 'us-east-1' | cut -d ':' -f 2 | sed -e 's/^[[:space:]]*//')
+        local _US_WEST_2=$(echo ${OUTPUT} | tail --quiet --lines=2 | grep 'us-west-2' | cut -d ':' -f 2 | sed -e 's/^[[:space:]]*//')
+        edit_nat_template "${_RELEASE}" "${_US_EAST_1}" "${_US_WEST_2}"
     fi
 }
 
