@@ -20,25 +20,23 @@
 #
 
 
-# TODO: nubis-skel (et all) build data is still getting stripped off
-# TODO: nubis-nat template in nubis-stacks is not updating the AMIs correctly
-# TODO: nubis-storage template in nubis-stacks is not updating the AMIs correctly
-# TODO: nubis-nat & nubis-storage template upload to S3 is not working
-# TODO: Upload lambda functions to S3
+# TODO, tag nubis-builder before building [nubis-ci]/nubis/puppet/builder.pp
+# TODO: Close release issues
+# DONE: UNTESTED: Address version updates in nubis-deploy
 
 
 NUBIS_PATH='/home/jason/projects/mozilla/projects/nubis'
 GITHUB_LOGIN='tinnightcap'
-#GITHUB_ORGINIZATION='tinnightcap'
 GITHUB_ORGINIZATION='nubisproject'
 PROFILE='default'
 set -o pipefail
 
 # List of repositories that will be excluded form the release
-declare -a RELEASE_EXCLUDES=( nubis-elasticsearch nubis-elk nubis-ha-nat nubis-junkheap nubis-meta nubis-proxy nubis-puppet-consul-replicate nubis-puppet-envconsul nubis-siege nubis-vpc nubis-wrapper )
+declare -a RELEASE_EXCLUDES=( nubis-ci nubis-elasticsearch nubis-elk nubis-ha-nat nubis-junkheap nubis-meta nubis-proxy nubis-puppet-consul-replicate nubis-puppet-envconsul nubis-siege nubis-vpc nubis-wrapper )
 
 # List of infrastructure projects that need to be rebuilt from nubis-base during a release
-declare -a INFRASTRUCTURE_ARRAY=( nubis-ci nubis-consul nubis-dpaste nubis-fluent-collector nubis-jumphost nubis-mediawiki nubis-nat nubis-skel nubis-storage )
+#declare -a INFRASTRUCTURE_ARRAY=( nubis-ci nubis-consul nubis-dpaste nubis-fluent-collector nubis-jumphost nubis-mediawiki nubis-nat nubis-skel nubis-storage )
+declare -a INFRASTRUCTURE_ARRAY=( nubis-consul nubis-dpaste nubis-fluent-collector nubis-jumphost nubis-mediawiki nubis-nat nubis-skel nubis-storage )
 
 declare -a REPOSITORY_ARRAY
 
@@ -191,7 +189,7 @@ create_milestones () {
     for REPOSITORY in ${REPOSITORY_ARRAY[*]}; do
         if [[ " ${RELEASE_EXCLUDES[@]} " =~ " ${REPOSITORY} " ]]; then
             echo -e "\n Skipping \"${REPOSITORY}\" as it is in the excludes list. (${_COUNT} of ${#REPOSITORY_ARRAY[*]})"
-            let COUNT=${COUNT}+1
+            let COUNT=${_COUNT}+1
         else
             echo -e "\n Creating milestone in \"${REPOSITORY}\". (${_COUNT} of ${#REPOSITORY_ARRAY[*]})"
             local _RELEASE="${1}"
@@ -274,11 +272,40 @@ check_in_changes () {
 }
 
 build_instructions () {
+# gpg --keyserver hkp://keys.gnupg.net --recv-keys 409B6B1796C275462A1703113804BB82D39DC0E3
+# \curl -sSL https://get.rvm.io | bash -s stable
+# source ~/.rvm/scripts/rvm
+# rvm install 2.1
+# rvm use 2.1
+# sudo ln -s ~/.rvm/rubies/ruby-2.1.8/bin/ruby /usr/bin/ruby2.1
+# gem install puppet
+# gem install librarian-puppet
+# gem install github_changelog_generator
+    echo "rvm use 2.1"
+    echo "cd /home/jason/projects/mozilla/projects/nubis/nubis-base/nubis/ && librarian-puppet clean; cd -"
+    echo "rm /home/jason/projects/mozilla/projects/nubis/nubis-base/nubis/Puppetfile.lock"
     echo "RELEASE='v1.1.0'"
+    echo "$0 file-release \${RELEASE}"
     echo "$0 update-all"
     echo "$0 --profile nubis-market upload-stacks \${RELEASE}"
-    echo "$0 build-infrastructure \${RELEASE}"
+    echo "$0 --profile nubis-market build-infrastructure \${RELEASE}"
     echo "$0 release-all \${RELEASE}"
+    echo "Take care of nubis-ci bullshit"
+    echo "Update nubis-builder version to currentl release in:"
+    echo "vi /home/jason/projects/mozilla/projects/nubis/nubis-ci//nubis/terraform/builder.pp"
+    echo "$0 --profile nubis-market build nubis-ci \${RELEASE}"
+    echo "$0 release nubis-ci \${RELEASE}"
+    echo "./generate_release_cvs.sh"
+    echo "inport into milestone tracker at:"
+    echo "https://docs.google.com/spreadsheets/d/1tClKynjyng50VEq-xuMwSP_Pkv-FsXWxEejWs-SjDu8/edit?usp=sharing"
+    echo "Create a release presentation and export the pdf to be added to the nubis-docs/presentations folder:"
+    echo "https://docs.google.com/a/mozilla.com/presentation/d/1IEyH3eDbAha1eFCfeDtHryME-1-2xeGcSgOy1HJmVgc/edit?usp=sharing"
+    echo "Using the nubis-docs/templates/announce.txt send an email to:"
+    echo "nubis-announce@googlegroups.com infra-systems@mozilla.com infra-webops@mozilla.com itleadership@mozilla.com moc@mozilla.com"
+    echo "$0 create-milestones v1.X.0 # For the next release"
+    echo "$0 --profile nubis-market upload-stacks v1.X.0 # For the next release"
+    echo "$0 --profile nubis-market build-infrastructure v1.X.0-dev # For the next release"
+    echo "$0 --profile nubis-market build nubis-ci v1.X.0-dev # For the next release"
 }
 
 # Upload nubis-stacks to release folder
@@ -332,6 +359,22 @@ upload_stacks () {
     check_in_changes 'nubis-stacks' "Update StacksVersion for ${RELEASE} release"
 }
 
+upload_lambda_functions () {
+    local _RELEASE="${1}"
+    if [ ${_RELEASE:-NULL} == 'NULL' ]; then
+        echo "Relesae number required"
+        $0 help
+        exit 1
+    fi
+    cd ${NUBIS_PATH}/nubis-stacks && bin/upload_to_s3 --profile ${PROFILE} --path "${_RELEASE}" push-lambda
+    if [ $? != '0' ]; then
+        echo "Uploads for ${_RELEASE} failed."
+        echo "Aborting....."
+        exit 1
+    fi
+    check_in_changes 'nubis-stacks' "Updated lambda function bundles for ${RELEASE} release"
+}
+
 # Update StacksVersion to the current release
 edit_main_json () {
     local _RELEASE="${1}"
@@ -351,7 +394,6 @@ edit_main_json () {
         if [ ${_EDIT_VERSION:-0} -ge 1 ]; then
             echo -e "Updating StacksVersion in \"${_FILE}\"."
             cat "${_FILE}" | jq ".Parameters.StacksVersion.Default|=\"${_RELEASE}\"" | sponge "${_FILE}"
-#            check_in_changes "${_REPOSITORY}" "Update StacksVersion for ${_RELEASE} release" "${_FILE}"
         fi
     fi
 }
@@ -373,7 +415,7 @@ edit_project_json () {
         if [ ${_EDIT_PROJECT_VERSION:-0} -ge 1 ]; then
             echo -e "Updating project_version in \"${_FILE}\"."
             # Preserve any build data appended to the version 
-            local _BUILD=$(cat ${_FILE} | jq --raw-output '"\(.variables.project_version)"' | cut -d'_' -f2-)
+            local _BUILD=$(cat ${_FILE} | jq --raw-output '"\(.variables.project_version)"' | cut -s -d'_' -f2-)
             cat "${_FILE}" | jq ".variables.project_version|=\"${_RELEASE}${_BUILD:+_${_BUILD}}\"" | sponge "${_FILE}"
         else
             echo -e "Variable project_version does not exist in \"${_FILE}\"."
@@ -389,7 +431,6 @@ edit_project_json () {
         if [ ${_EDIT_SOURCE:-0} -ge 1 ]; then
             cat "${_FILE}" | jq ".variables.source_ami_project_version|=\"${_RELEASE}\"" | sponge "${_FILE}"
         fi
-#        check_in_changes "${_REPOSITORY}" "Update project_version for ${_RELEASE} release" "${_FILE}"
     fi
 }
 
@@ -428,8 +469,32 @@ edit_nat_template () {
 
     check_in_changes 'nubis-stacks' "Update nat AMI Ids for ${_RELEASE} release" 'vpc/vpc-nat.template'
 
-    echo "Uploading updated storage.template to S3."
+    echo "Uploading updated vpc/vpc-nat.template to S3."
     cd ${NUBIS_PATH}/nubis-stacks && bin/upload_to_s3 --profile ${PROFILE} --path "${_RELEASE}" push vpc/vpc-nat.template
+}
+
+# This is a special edit to update the pinned version number to the current $RELEASE for the consul and vpc modules in nubis-deploy
+edit_deploy_templates () {
+    local _RELEASE="${1}"
+    if [ ${_RELEASE:-NULL} == 'NULL' ]; then
+        echo "Relesae number required"
+        $0 help
+        exit 1
+    fi
+
+    local _CONSUL_FILE="${NUBIS_PATH}/nubis-deploy/modules/consul/main.tf"
+    local _VPC_FILE="${NUBIS_PATH}/nubis-deploy/modules/vpc/main.tf"
+
+    sed "s:nubis-consul//nubis/terraform/multi?ref=v[0-9].[0-9].[0-9]*:nubis-consul//nubis/terraform/multi?ref=${_RELEASE}:g" "${_CONSUL_FILE}" |\
+    sponge "${_CONSUL_FILE}"
+
+    sed "s:nubis-jumphost//nubis/terraform?ref=v[0-9].[0-9].[0-9]*:nubis-jumphost//nubis/terraform?ref=${_RELEASE}:g" "${_VPC_FILE}" |\
+    sponge "${_VPC_FILE}"
+    sed "s:nubis-fluent-collector//nubis/terraform/multi?ref=v[0-9].[0-9].[0-9]*:nubis-fluent-collector//nubis/terraform/multi?ref=${_RELEASE}:g" "${_VPC_FILE}" |\
+    sponge "${_VPC_FILE}"
+
+    check_in_changes 'nubis-deploy' "Update pinned release version for ${_RELEASE} release"
+
 }
 
 # Build new AMIs for the named repository
@@ -449,11 +514,11 @@ build_amis () {
     test_for_nubis_builder
     edit_main_json "${_RELEASE}" "${_REPOSITORY}"
     edit_project_json "${_RELEASE}" "${_REPOSITORY}"
-#    check_in_changes "${_REPOSITORY}" "Update versions for ${_RELEASE} release"
     echo "Running nubis-builder...."
     exec 5>&1
     OUTPUT=$(cd "${NUBIS_PATH}/${_REPOSITORY}" && nubis-builder build | tee >(cat - >&5))
     if [ $? != '0' ]; then
+# Timeout waiting for SSH
         echo "Build for ${_REPOSITORY} failed. Contine? [y/N]"
         read CONTINUE
         if [ ${CONTINUE:-n} == "N" ] || [ ${CONTINUE:-n} == "n" ]; then
@@ -463,23 +528,22 @@ build_amis () {
         continue
     fi
     exec 5>&-
-    # nubis-builder outputs the AMI IDs to a file. Lets check it in here
-    # Lets blow away the silly project.json updates first
-#    cd "${NUBIS_PATH}/${_REPOSITORY}" && git checkout . 'nubis/builder/project.json'
-#    check_in_changes "${_REPOSITORY}" "Update builder artifacts for ${RELEASE} release" "nubis/builder/artifacts/${RELEASE}/*"
+    # nubis-builder outputs some build artifacts. Lets check them in here
     check_in_changes "${_REPOSITORY}" "Update builder artifacts for ${RELEASE} release"
 
     # Special hook for nubis-storage
     if [ ${_REPOSITORY:-NULL} == 'nubis-storage' ]; then
-        local _US_EAST_1=$(echo ${OUTPUT} | tail --quiet --lines=2 | grep 'us-east-1' | cut -d ':' -f 2 | sed -e 's/^[[:space:]]*//')
-        local _US_WEST_2=$(echo ${OUTPUT} | tail --quiet --lines=2 | grep 'us-west-2' | cut -d ':' -f 2 | sed -e 's/^[[:space:]]*//')
+        AMI_ARTIFACT="${NUBIS_PATH}/${_REPOSITORY}/nubis/builder/artifacts/${RELEASE}/AMIs"
+        local _US_EAST_1=$(cat ${AMI_ARTIFACT} | grep 'us-east-1' | cut -d ':' -f 2 | sed -e 's/^[[:space:]]*//')
+        local _US_WEST_2=$(cat ${AMI_ARTIFACT} | grep 'us-west-2' | cut -d ':' -f 2 | sed -e 's/^[[:space:]]*//')
         edit_storage_template "${_RELEASE}" "${_US_EAST_1}" "${_US_WEST_2}"
     fi
 
     # Special hook for nubis-nat
     if [ ${_REPOSITORY:-NULL} == 'nubis-nat' ]; then
-        local _US_EAST_1=$(echo ${OUTPUT} | tail --quiet --lines=2 | grep 'us-east-1' | cut -d ':' -f 2 | sed -e 's/^[[:space:]]*//')
-        local _US_WEST_2=$(echo ${OUTPUT} | tail --quiet --lines=2 | grep 'us-west-2' | cut -d ':' -f 2 | sed -e 's/^[[:space:]]*//')
+        AMI_ARTIFACT="${NUBIS_PATH}/${_REPOSITORY}/nubis/builder/artifacts/${RELEASE}/AMIs"
+        local _US_EAST_1=$(cat ${AMI_ARTIFACT} | grep 'us-east-1' | cut -d ':' -f 2 | sed -e 's/^[[:space:]]*//')
+        local _US_WEST_2=$(cat ${AMI_ARTIFACT} | grep 'us-west-2' | cut -d ':' -f 2 | sed -e 's/^[[:space:]]*//')
         edit_nat_template "${_RELEASE}" "${_US_EAST_1}" "${_US_WEST_2}"
     fi
 }
@@ -528,6 +592,10 @@ release_repository () {
         exit 1
     fi
     cd ${NUBIS_PATH}/${_REPOSITORY}
+
+    if [ ${_REPOSITORY} == 'nubis-deploy' ]; then
+        edit_deploy_templates "${_RELEASE}"
+    fi
     
     # Update the CHANGELOG and make a pull-request, rebasing first to ensure a clean repository
     test_for_github_changelog_generator
@@ -579,8 +647,9 @@ release_all_repositories () {
 }
 
 testing () {
-    get_repositories
-    echo ${REPOSITORY_ARRAY[*]}
+#    get_repositories
+#    echo ${REPOSITORY_ARRAY[*]}
+    edit_deploy_templates "$1"
 }
 
 # Grab and setup called options
@@ -614,9 +683,11 @@ while [ "$1" != "" ]; do
             echo -en "  file-release [rel]            File all release issues in GitHub\n"
             echo -en "  create-milestones [rel]       Create all milestones in Github\n"
             echo -en "  upload-stacks [rel]           Upload nested stacks to S3\n"
+            echo -en "  build [repo] [rel]            Build AMIs for [REPO] repository at [REL] release\n"
             echo -en "  build-infrastructure [rel]    Build all infrastructure components\n"
+            echo -en "  release [repo] [rel]          Release [REPO] repository at [REL] release\n"
             echo -en "  release-all [rel]             Release all ${GITHUB_ORGINIZATION} repositories\n"
-            echo -en "  build                         Echo build steps\n\n"
+            echo -en "  build-instructions            Echo build steps\n\n"
             echo -en "Options:\n"
             echo -en "  --help      -h    Print this help information and exit\n"
             echo -en "  --path      -p    Specify a path where your nubis repositories are checked out\n"
@@ -655,6 +726,15 @@ while [ "$1" != "" ]; do
             RELEASE="${2}"
             shift
             upload_stacks ${RELEASE}
+            upload_lambda_functions ${RELEASE}
+            GOT_COMMAND=1
+        ;;
+        build )
+            REPOSITORY="${2}"
+            RELEASE="${3}"
+            shift
+            echo -e "\n Building AMIs for \"${REPOSITORY}\"."
+            build_amis "${RELEASE}" "${REPOSITORY}"
             GOT_COMMAND=1
         ;;
         build-infrastructure )
@@ -663,20 +743,29 @@ while [ "$1" != "" ]; do
             build_infrastructure_amis ${RELEASE}
             GOT_COMMAND=1
         ;;
+        release )
+            REPOSITORY="${2}"
+            RELEASE="${3}"
+            shift
+            echo -e "\n Releasing repository \"${REPOSITORY}\". (${_COUNT} of ${#REPOSITORY_ARRAY[*]})"
+            release_repository "${RELEASE}" "${REPOSITORY}"
+            GOT_COMMAND=1
+        ;;
         release-all )
             RELEASE="${2}"
             shift
             release_all_repositories ${RELEASE}
             GOT_COMMAND=1
         ;;
-        build )
+        build-instructions )
             build_instructions
             GOT_COMMAND=1
         ;;
         testing )
-            testing $2
+            RELEASE="${2}"
 #            RET=$(testing "$2" "nubis-base")
-#            echo "RET: $RET"
+            RET=$(testing "${RELEASE}")
+            echo "RET: $RET"
             shift
             GOT_COMMAND=1
         ;;
