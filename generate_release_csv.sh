@@ -1,7 +1,7 @@
 #!/bin/bash
 # go get github.com/jehiah/json2csv
 
-RELEASE_DATES="2015-11-20..2016-04-18"
+RELEASE_DATES="2016-04-18..2016-07-10"
 GITHUB_URL="https://api.github.com/search/issues?q=is:closed+is:issue+user:Nubisproject+updated:$RELEASE_DATES"
 TMP_OUTPUT_FILE="/tmp/github_temp.json"
 CSV_FILE="nubis-release-$RELEASE_DATES.csv"
@@ -91,6 +91,6 @@ clean_up () {
  rm -f ${TMP_OUTPUT_FILE}
 }
 
-#collect_data
+collect_data
 parse_data
-#clean_up
+clean_up
