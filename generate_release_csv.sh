@@ -2,7 +2,8 @@
 # go get github.com/jehiah/json2csv
 
 RELEASE_DATES="2016-04-18..2016-07-10"
-GITHUB_URL="https://api.github.com/search/issues?q=is:closed+is:issue+user:Nubisproject+updated:$RELEASE_DATES"
+#RELEASE_DATES="2016-07-10..2016-07-30"
+GITHUB_URL="https://api.github.com/search/issues?q=is:closed+is:issue+user:Nubisproject+created:$RELEASE_DATES"
 TMP_OUTPUT_FILE="/tmp/github_temp.json"
 CSV_FILE="nubis-release-$RELEASE_DATES.csv"
 shopt -s extglob # Required to trim characters

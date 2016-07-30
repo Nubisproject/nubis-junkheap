@@ -21,6 +21,8 @@
 
 
 # TODO, tag nubis-builder before building [nubis-ci]/nubis/puppet/builder.pp
+# TODO: Release nubis-puppet-* before all others
+# TODO: if a nubis/Puppetfile exists do the librarian-puppet dance (nubis-nat - edit versions)
 # TODO: Close release issues
 # DONE: UNTESTED: Address version updates in nubis-deploy
 
@@ -28,7 +30,8 @@
 NUBIS_PATH='/home/jason/projects/mozilla/projects/nubis'
 GITHUB_LOGIN='tinnightcap'
 GITHUB_ORGINIZATION='nubisproject'
-PROFILE='default'
+PROFILE='nubis-market-admin'
+AWS_VAULT_COMMAND="aws-vault --backend=kwallet exec --assume-role-ttl=60m $PROFILE --"
 set -o pipefail
 
 # List of repositories that will be excluded form the release
@@ -287,15 +290,20 @@ build_instructions () {
     echo "RELEASE='v1.1.0'"
     echo "$0 file-release \${RELEASE}"
     echo "$0 update-all"
-    echo "$0 --profile nubis-market upload-stacks \${RELEASE}"
-    echo "$0 --profile nubis-market build-infrastructure \${RELEASE}"
+    echo "$0 upload-stacks \${RELEASE}"
+    echo "export AWS_VAULT_BACKEND=kwallet"
+    echo "$0 build-infrastructure \${RELEASE}"
     echo "$0 release-all \${RELEASE}"
     echo "Take care of nubis-ci bullshit"
     echo "Update nubis-builder version to currentl release in:"
-    echo "vi /home/jason/projects/mozilla/projects/nubis/nubis-ci//nubis/terraform/builder.pp"
-    echo "$0 --profile nubis-market build nubis-ci \${RELEASE}"
+    echo "vi /home/jason/projects/mozilla/projects/nubis/nubis-ci/nubis/puppet/builder.pp"
+    echo "$0 build nubis-ci \${RELEASE}"
     echo "$0 release nubis-ci \${RELEASE}"
-    echo "./generate_release_cvs.sh"
+    echo "Close all release issues"
+    echo "https://github.com/issues?q=is%3Aissue+user%3ANubisproject+\${RELEASE}+in%3Atitle+is%3Aopen"
+    echo "Update date range in generate_release_csv.sh"
+    echo "vi ./generate_release_csv.sh"
+    echo "./generate_release_csv.sh"
     echo "inport into milestone tracker at:"
     echo "https://docs.google.com/spreadsheets/d/1tClKynjyng50VEq-xuMwSP_Pkv-FsXWxEejWs-SjDu8/edit?usp=sharing"
     echo "Create a release presentation and export the pdf to be added to the nubis-docs/presentations folder:"
@@ -303,9 +311,9 @@ build_instructions () {
     echo "Using the nubis-docs/templates/announce.txt send an email to:"
     echo "nubis-announce@googlegroups.com infra-systems@mozilla.com infra-webops@mozilla.com itleadership@mozilla.com moc@mozilla.com"
     echo "$0 create-milestones v1.X.0 # For the next release"
-    echo "$0 --profile nubis-market upload-stacks v1.X.0 # For the next release"
-    echo "$0 --profile nubis-market build-infrastructure v1.X.0-dev # For the next release"
-    echo "$0 --profile nubis-market build nubis-ci v1.X.0-dev # For the next release"
+    echo "$0 upload-stacks v1.X.0 # For the next release"
+    echo "$0 build-infrastructure v1.X.0-dev # For the next release"
+    echo "$0 build nubis-ci v1.X.0-dev # For the next release"
 }
 
 # Upload nubis-stacks to release folder
@@ -350,7 +358,7 @@ upload_stacks () {
     done
     unset TEMPLATE
 
-    cd ${NUBIS_PATH}/nubis-stacks && bin/upload_to_s3 --profile ${PROFILE} --path "${_RELEASE}" push
+    cd ${NUBIS_PATH}/nubis-stacks && $AWS_VAULT_COMMAND bin/upload_to_s3 --profile ${PROFILE} --path "${_RELEASE}" push
     if [ $? != '0' ]; then
         echo "Uploads for ${_RELEASE} failed."
         echo "Aborting....."
@@ -366,7 +374,7 @@ upload_lambda_functions () {
         $0 help
         exit 1
     fi
-    cd ${NUBIS_PATH}/nubis-stacks && bin/upload_to_s3 --profile ${PROFILE} --path "${_RELEASE}" push-lambda
+    cd ${NUBIS_PATH}/nubis-stacks && $AWS_VAULT_COMMAND bin/upload_to_s3 --profile ${PROFILE} --path "${_RELEASE}" push-lambda
     if [ $? != '0' ]; then
         echo "Uploads for ${_RELEASE} failed."
         echo "Aborting....."
@@ -453,7 +461,7 @@ edit_storage_template () {
     check_in_changes 'nubis-stacks' "Update storage AMI Ids for ${_RELEASE} release" 'storage.template'
 
     echo "Uploading updated storage.template to S3."
-    cd ${NUBIS_PATH}/nubis-stacks && bin/upload_to_s3 --profile ${PROFILE} --path "${_RELEASE}" push storage.template
+    cd ${NUBIS_PATH}/nubis-stacks && $AWS_VAULT_COMMAND bin/upload_to_s3 --profile ${PROFILE} --path "${_RELEASE}" push storage.template
 }
 
 # This is a special edit to update an AMI mapping in nubis-nat in nubis-stacks
@@ -470,7 +478,7 @@ edit_nat_template () {
     check_in_changes 'nubis-stacks' "Update nat AMI Ids for ${_RELEASE} release" 'vpc/vpc-nat.template'
 
     echo "Uploading updated vpc/vpc-nat.template to S3."
-    cd ${NUBIS_PATH}/nubis-stacks && bin/upload_to_s3 --profile ${PROFILE} --path "${_RELEASE}" push vpc/vpc-nat.template
+    cd ${NUBIS_PATH}/nubis-stacks && $AWS_VAULT_COMMAND bin/upload_to_s3 --profile ${PROFILE} --path "${_RELEASE}" push vpc/vpc-nat.template
 }
 
 # This is a special edit to update the pinned version number to the current $RELEASE for the consul and vpc modules in nubis-deploy
