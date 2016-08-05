@@ -35,7 +35,7 @@ AWS_VAULT_COMMAND="aws-vault --backend=kwallet exec --assume-role-ttl=60m $PROFI
 set -o pipefail
 
 # List of repositories that will be excluded form the release
-declare -a RELEASE_EXCLUDES=( nubis-ci nubis-elasticsearch nubis-elk nubis-ha-nat nubis-junkheap nubis-meta nubis-proxy nubis-puppet-consul-replicate nubis-puppet-envconsul nubis-siege nubis-vpc nubis-wrapper )
+declare -a RELEASE_EXCLUDES=( nubis-ci nubis-elasticsearch nubis-elk nubis-ha-nat nubis-junkheap nubis-meta nubis-proxy nubis-puppet-storage nubis-puppet-nat nubis-puppet-nsm nubis-puppet-mig nubis-puppet-eip nubis-puppet-discovery nubis-puppet-consul_do nubis-puppet-configuration nubis-puppet-envconsul nubis-puppet-consul-replicate nubis-siege nubis-vpc nubis-wrapper  )
 
 # List of infrastructure projects that need to be rebuilt from nubis-base during a release
 #declare -a INFRASTRUCTURE_ARRAY=( nubis-ci nubis-consul nubis-dpaste nubis-fluent-collector nubis-jumphost nubis-mediawiki nubis-nat nubis-skel nubis-storage )
