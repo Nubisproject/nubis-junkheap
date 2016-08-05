@@ -2,7 +2,7 @@
 # go get github.com/jehiah/json2csv
 
 #RELEASE_DATES="2016-04-18..2016-07-10"
-RELEASE_DATES="2016-07-10..2016-07-30"
+RELEASE_DATES="2016-08-04..2016-08-05"
 GITHUB_URL="https://api.github.com/search/issues?q=is:closed+is:issue+user:Nubisproject+closed:$RELEASE_DATES"
 TMP_OUTPUT_FILE="/tmp/github_temp.json"
 CSV_FILE="nubis-release-$RELEASE_DATES.csv"
@@ -30,6 +30,10 @@ get_data () {
 
 get_link_header_segments () {
     get_headers
+    # if github does not return a 'Link' header, break
+    if [ ${#LINK} == 0 ]; then
+        break
+    fi
     while [ ${COUNT:-0} -lt 4 ]; do
         let COUNT=$COUNT+1
         LINK_SEGMENT=$(echo $LINK | cut -d ',' -f $COUNT)
@@ -73,6 +77,10 @@ collect_data () {
         echo "Grabbing issues from: ${GITHUB_URL}"
         get_data
         get_pagination_urls
+        # If we do not get a 'next' url, break
+        if [ ${#NEXT_URL} == 0 ]; then
+            break
+        fi
         if [ ${NEXT_URL} != ${LAST_URL} ]; then
             GITHUB_URL=${NEXT_URL}
         else
