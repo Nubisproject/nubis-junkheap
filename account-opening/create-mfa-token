@@ -1,0 +1,20 @@
+#!/bin/bash
+# Creates mfa token, stolen from mana and modified to fit my needs
+# will encrypt the output
+
+. lib.sh || exit 1
+
+set -u
+
+read -p "What is the AWS account ID : " accountid;
+read -p "What is the MFA secret seed? : " secret;
+read -p "What is the account number? : " account_number;
+
+otp_uri="otpauth://totp/root-account-mfa-device@${accountid}?secret=${secret}"
+account_file="${accountid}-${account_number}"
+echo -n "${otp_uri}" > "${account_file}"
+encrypt "${account_file}"
+safedelete "${account_file}"
+
+unset otp_uri
+unset secret

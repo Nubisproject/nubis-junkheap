@@ -1,0 +1,23 @@
+#!/bin/bash
+
+ACCOUNT_NAME=$1
+
+fail() {
+    echo "$@"
+    exit 1
+}
+
+# pre-req
+hash aws 2>/dev/null || fail "Please install the AWS CLI API to use this tool. https://aws.amazon.com/cli/"
+
+if [ -z "${ACCOUNT_NAME}" ]; then
+    fail "Usage: $0 <account name>"
+fi
+
+out=$(aws iam list-account-aliases --query AccountAliases --output text)
+
+if [ -z "${out}" ]; then
+    echo "Creating account alias: ${ACCOUNT_NAME}"
+    aws iam create-account-alias --account-alias "${ACCOUNT_NAME}"
+fi
+
