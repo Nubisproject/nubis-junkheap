@@ -1,0 +1,14 @@
+#!/bin/bash
+# This deletes the organization role that AWS organization creates
+# Assumes you have jq and awscli installed as well as all environment variables set
+
+ROLENAME="${1:-OrganizationAccountAccessRole}"
+
+org_role_arn=$(aws iam get-role --role-name OrganizationAccountAccessRole --query 'Role.Arn' --output text)
+
+if [ ! -z "${org_role_arn}" ]; then
+    echo "Role ${ROLENAME} exists, deleting the role"
+    role_policies=$(aws iam list-role-policies --role-name ${ROLENAME} --query 'PolicyNames' --output text)
+    aws iam delete-role-policy --role-name ${ROLENAME} --policy-name ${role_policies}
+    aws iam delete-role --role-name ${ROLENAME}
+fi
