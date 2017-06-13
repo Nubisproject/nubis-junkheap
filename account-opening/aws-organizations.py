@@ -49,7 +49,7 @@ if __name__ == "__main__":
             print "Email " + options.email_address + " does not exist, creating account"
             response = client.create_account(
                     Email=options.email_address,
-                    AccountName=options_account_name
+                    AccountName=options.account_name
             )
             print response
     else:
