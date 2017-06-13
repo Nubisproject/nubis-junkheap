@@ -52,9 +52,8 @@ function encrypt() {
     fi
 
     echo "Encrypting ${filename} to ${users}..."
-    gpg -r "${flatulist}" -ae "${filename}"
+    gpg -r ${flatulist} -ae "${filename}"
     rv=$?
 
     return $rv
-
 }
