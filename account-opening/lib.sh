@@ -11,18 +11,20 @@ function fail() {
 function safedelete()
 {
     local prog
-    if [[ -x $(which srm) ]]; then
-        prog=$(which srm)
-    else
-        prog=$(which shred)
-    fi
+
+    # We assume all computers uses shred
+    prog=$(which shred)
+
     [[ -z "${prog}" ]] && {
         fail "WARNING: Safe deletion of $1 failed, please manually wipe with srm or equivalent secure deletion program."
     }
 
-    ${prog} $1 || {
+    ${prog} -zn 3 -u ${1}
+    rv=$?
+
+    if [ "${rv}" -ne 0 ]; then
         fail "WARNING: Safe deletion of $1 failed, please manually wipe with srm or equivalent secure deletion program."
-    }
+    fi
 }
 
 function verify_userlist() {
