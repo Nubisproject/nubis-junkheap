@@ -11,7 +11,7 @@ function fail() {
 }
 
 function account_alias() {
-    if [ -z $1 ]; then echo "Usage: $FUNCNAME <account name>"; exit 1; fi
+    if [ -z "$1" ]; then echo "Usage: $FUNCNAME <account name>"; exit 1; fi
 
     local account_name=$1
     out=$(aws iam list-account-aliases --query AccountAliases --output text)
@@ -37,9 +37,9 @@ function delete_organization_role() {
     org_role_arn=$(aws iam get-role --role-name OrganizationAccountAccessRole --query 'Role.Arn' --output text)
     if [ ! -z "${org_role_arn}" ]; then
         echo "Role ${ROLENAME} exists, deleting the role"
-        role_policies=$(aws iam list-role-policies --role-name ${ROLENAME} --query 'PolicyNames' --output text)
-        aws iam delete-role-policy --role-name ${ROLENAME} --policy-name ${role_policies}
-        aws iam delete-role --role-name ${ROLENAME}
+        role_policies=$(aws iam list-role-policies --role-name "${ROLENAME}" --query 'PolicyNames' --output text)
+        aws iam delete-role-policy --role-name "${ROLENAME}" --policy-name "${role_policies}"
+        aws iam delete-role --role-name "${ROLENAME}"
     fi
 }
 
@@ -49,7 +49,7 @@ function create_inline_admin_policy() {
     local bootstrap_user="${1:-nubis-bootstrap}"
     local admin_policy_doc="{\"Version\":\"2012-10-17\",\"Statement\":[{\"Action\":\"*\",\"Resource\":\"*\",\"Effect\":\"Allow\"}]}"
 
-    out=$(aws iam list-user-policies --user-name ${bootstrap_user} --query PolicyNames --output text | grep "admin")
+    out=$(aws iam list-user-policies --user-name "${bootstrap_user}" --query PolicyNames --output text | grep "admin")
     if [ -z "${out}" ]; then
         echo "Creating inline policy for user: ${bootstrap_user}"
         aws iam put-user-policy --user-name "${bootstrap_user}" --policy-document "${admin_policy_doc}" --policy-name admin
