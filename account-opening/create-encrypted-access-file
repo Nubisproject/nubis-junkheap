@@ -3,7 +3,12 @@
 . lib.sh || exit 1
 set -u
 
-read -e -p "What is the Account name : " account_name;
+account_name=${1}
+
+if [ -z ${account_name} ]; then
+    fail "Usage: $0 <account name>"
+fi
+
 read -e -p "What is the AWS access key : " access_key;
 read -e -p "What is the AWS secret key : " secret_key;
 

@@ -6,12 +6,17 @@
 
 set -u
 
-read -e -p "What is the AWS account ID : " accountid;
+account_name=${1}
+
+if [ -z ${account_name} ]; then
+    fail "Usage: $0 <account name>"
+fi
+
 read -e -p "What is the MFA secret seed? : " secret;
 read -e -p "What is the account number? : " account_number;
 
-otp_uri="otpauth://totp/root-account-mfa-device@${accountid}?secret=${secret}"
-account_file="${accountid}-${account_number}"
+otp_uri="otpauth://totp/root-account-mfa-device@${account_name}?secret=${secret}"
+account_file="${account_name}-${account_number}"
 echo -n "${otp_uri}" > "${account_file}"
 encrypt "${account_file}"
 safedelete "${account_file}"
