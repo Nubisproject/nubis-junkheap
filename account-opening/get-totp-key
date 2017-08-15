@@ -1,0 +1,11 @@
+#!/bin/bash
+
+unset HISTFILE
+encrypted_file=$1
+
+if [ -z "${encrypted_file}" ] || [ ! -f "${encrypted_file}" ]; then
+    echo "Something is wrong with the file, exiting"
+    exit 1
+fi
+
+gpg --batch --quiet --decrypt "${encrypted_file}" | sed -E 's/^.*secret=(.+)$/\1/g' | xargs oathtool -b --totp
